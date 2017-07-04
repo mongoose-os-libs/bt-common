@@ -1,0 +1,18 @@
+author: mongoose-os
+description: Bluetooth support
+type: lib
+version: 1.0
+
+config_schema:
+  - ["bt", "o", {title: "Bluetooth settings"}]
+  - ["bt.enable", "b", false, {title: "Enable BT"}]
+  - ["bt.dev_name", "s", "", {title: "Device name; defaults to device.id"}]
+  - ["bt.adv_enable", "b", true, {title: "Advertise services"}]
+
+tags:
+  - bt
+  - bluetooth
+  - c
+  - hw
+
+skeleton_version: 2017-06-16
