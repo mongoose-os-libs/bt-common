@@ -22,6 +22,8 @@
 
 #include "fw/src/mgos_sys_config.h"
 #include "fw/src/mgos_timers.h"
+#include "fw/src/mgos_utils.h"
+#include "fw/src/mgos_wifi.h"
 
 struct esp32_bt_service_entry {
   const esp_gatts_attr_db_t *svc_descr;
@@ -550,11 +552,29 @@ bool mgos_bt_gatts_register_service(const esp_gatts_attr_db_t *svc_descr,
   return true;
 }
 
+static void mgos_bt_wifi_changed_cb(enum mgos_wifi_status ev, void *arg) {
+  if (ev != MGOS_WIFI_IP_ACQUIRED) return;
+  LOG(LL_INFO, ("WiFi connected, disabling Bluetooth"));
+  get_cfg()->bt.enable = false;
+  char *msg = NULL;
+  if (save_cfg(get_cfg(), &msg)) {
+    esp_bt_controller_disable(ESP_BT_MODE_BTDM);
+  }
+  (void) arg;
+}
+
 bool mgos_bt_common_init(void) {
   bool ret = false;
   const struct sys_config *cfg = get_cfg();
   const struct sys_config_bt *btcfg = &cfg->bt;
-  if (!btcfg->enable) return true;
+  if (!btcfg->enable) {
+    LOG(LL_INFO, ("Bluetooth is disabled"));
+    return true;
+  }
+
+  if (!btcfg->keep_enabled) {
+    mgos_wifi_add_on_change_cb(mgos_bt_wifi_changed_cb, NULL);
+  }
 
   const char *dev_name = btcfg->dev_name;
   if (dev_name == NULL) dev_name = cfg->device.id;
@@ -590,7 +610,7 @@ bool mgos_bt_common_init(void) {
   esp_ble_gap_register_callback(esp32_bt_gap_ev);
   esp_ble_gatts_app_register(0);
 
-  LOG(LL_INFO, ("BT init ok, advertising %s",
+  LOG(LL_INFO, ("Bluetooth init ok, advertising %s",
                 (btcfg->adv_enable ? "enabled" : "disabled")));
   ret = true;
 

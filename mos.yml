@@ -5,9 +5,10 @@ version: 1.0
 
 config_schema:
   - ["bt", "o", {title: "Bluetooth settings"}]
-  - ["bt.enable", "b", false, {title: "Enable BT"}]
+  - ["bt.enable", "b", true, {title: "Enable BT"}]
   - ["bt.dev_name", "s", "", {title: "Device name; defaults to device.id"}]
   - ["bt.adv_enable", "b", true, {title: "Advertise services"}]
+  - ["bt.keep_enabled", "b", false, {title: "By default, BT will be disabled once WiFi is configured and connects. Set this to true to keep BT enabled."}]
 
 tags:
   - bt
