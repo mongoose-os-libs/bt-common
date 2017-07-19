@@ -20,10 +20,10 @@
 #include "common/cs_dbg.h"
 #include "common/queue.h"
 
+#include "fw/src/mgos_net.h"
 #include "fw/src/mgos_sys_config.h"
 #include "fw/src/mgos_timers.h"
 #include "fw/src/mgos_utils.h"
-#include "fw/src/mgos_wifi.h"
 
 struct esp32_bt_service_entry {
   const esp_gatts_attr_db_t *svc_descr;
@@ -552,8 +552,13 @@ bool mgos_bt_gatts_register_service(const esp_gatts_attr_db_t *svc_descr,
   return true;
 }
 
-static void mgos_bt_wifi_changed_cb(enum mgos_wifi_status ev, void *arg) {
-  if (ev != MGOS_WIFI_IP_ACQUIRED) return;
+static void mgos_bt_net_ev(enum mgos_net_event ev,
+                           const struct mgos_net_event_data *ev_data,
+                           void *arg) {
+  if (!(ev == MGOS_NET_EV_IP_ACQUIRED &&
+        ev_data->if_type == MGOS_NET_IF_TYPE_WIFI)) {
+    return;
+  }
   LOG(LL_INFO, ("WiFi connected, disabling Bluetooth"));
   get_cfg()->bt.enable = false;
   char *msg = NULL;
@@ -573,7 +578,7 @@ bool mgos_bt_common_init(void) {
   }
 
   if (!btcfg->keep_enabled) {
-    mgos_wifi_add_on_change_cb(mgos_bt_wifi_changed_cb, NULL);
+    mgos_net_add_event_handler(mgos_bt_net_ev, NULL);
   }
 
   const char *dev_name = btcfg->dev_name;
