@@ -20,10 +20,10 @@
 #include "common/cs_dbg.h"
 #include "common/queue.h"
 
-#include "fw/src/mgos_net.h"
-#include "fw/src/mgos_sys_config.h"
-#include "fw/src/mgos_timers.h"
-#include "fw/src/mgos_utils.h"
+#include "mgos_net.h"
+#include "mgos_sys_config.h"
+#include "mgos_timers.h"
+#include "mgos_utils.h"
 
 struct esp32_bt_service_entry {
   const esp_gatts_attr_db_t *svc_descr;
