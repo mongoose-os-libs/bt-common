@@ -555,11 +555,8 @@ bool mgos_bt_gatts_register_service(const esp_gatts_attr_db_t *svc_descr,
 static void mgos_bt_net_ev(enum mgos_net_event ev,
                            const struct mgos_net_event_data *ev_data,
                            void *arg) {
-  if (!(ev == MGOS_NET_EV_IP_ACQUIRED &&
-        ev_data->if_type == MGOS_NET_IF_TYPE_WIFI)) {
-    return;
-  }
-  LOG(LL_INFO, ("WiFi connected, disabling Bluetooth"));
+  if (ev != MGOS_NET_EV_IP_ACQUIRED) return;
+  LOG(LL_INFO, ("Network is up, disabling Bluetooth"));
   get_cfg()->bt.enable = false;
   char *msg = NULL;
   if (save_cfg(get_cfg(), &msg)) {
