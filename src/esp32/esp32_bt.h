@@ -15,6 +15,10 @@
 #define BT_ADDR_STR_LEN (ESP_BD_ADDR_LEN * 2 + ESP_BD_ADDR_LEN)
 #define BT_UUID_STR_LEN (ESP_UUID_LEN_128 * 2 + ESP_UUID_LEN_128)
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 const uint16_t primary_service_uuid;
 const uint16_t char_decl_uuid;
 const uint8_t char_prop_read_write;
@@ -45,5 +49,9 @@ bool mgos_bt_gatts_register_service(const esp_gatts_attr_db_t *svc_descr,
                                     mgos_bt_gatts_handler_t cb);
 
 bool esp32_bt_init(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* CS_MOS_LIBS_BT_SRC_ESP32_ESP32_BT_H_ */
