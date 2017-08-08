@@ -80,8 +80,8 @@ static esp_ble_adv_data_t mos_rpc_adv_data = {
     .set_scan_rsp = false,
     .include_name = true,
     .include_txpower = true,
-    .min_interval = 0x20,
-    .max_interval = 0x40,
+    .min_interval = 0x100, /* 0x100 * 0.625 = 100 ms */
+    .max_interval = 0x200, /* 0x200 * 0.625 = 200 ms */
     .appearance = 0x00,
     .manufacturer_len = 0,
     .p_manufacturer_data = NULL,
@@ -93,8 +93,8 @@ static esp_ble_adv_data_t mos_rpc_adv_data = {
 };
 
 static esp_ble_adv_params_t mos_adv_params = {
-    .adv_int_min = 0x20,
-    .adv_int_max = 0x40,
+    .adv_int_min = 0x100, /* 0x100 * 0.625 = 100 ms */
+    .adv_int_max = 0x200, /* 0x200 * 0.625 = 200 ms */
     .adv_type = ADV_TYPE_IND,
     .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
     .channel_map = ADV_CHNL_ALL,
@@ -105,8 +105,8 @@ static esp_ble_scan_params_t ble_scan_params = {
     .scan_type = BLE_SCAN_TYPE_ACTIVE,
     .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
     .scan_filter_policy = BLE_SCAN_FILTER_ALLOW_ALL,
-    .scan_interval = 0x50, /* 0x50 * 0.625 = 50 ms */
-    .scan_window = 0x30,   /* 0x30 * 0.625 = 30 ms */
+    .scan_interval = 0x100, /* 0x100 * 0.625 = 100 ms */
+    .scan_window = 0x50,    /* 0x50 * 0.625 = 50 ms */
 };
 
 static void mgos_bt_ble_scan_done(int num_res,
