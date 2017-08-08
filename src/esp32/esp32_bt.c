@@ -52,8 +52,20 @@ static SLIST_HEAD(s_svcs, esp32_bt_service_entry) s_svcs =
 static SLIST_HEAD(s_conns, esp32_bt_connection_entry) s_conns =
     SLIST_HEAD_INITIALIZER(s_conns);
 
+struct cb_info {
+  void *cb;
+  void *arg;
+  SLIST_ENTRY(cb_info) next;
+};
+static SLIST_HEAD(s_scan_cbs, cb_info) s_scan_cbs;
+static bool s_scan_in_progress = false;
+static struct mgos_bt_ble_scan_result *s_scan_results = NULL;
+static int s_num_scan_results = 0;
+#define MGOS_BT_BLE_SCAN_DURATION (5 /* seconds */)
+
 static const char *s_dev_name = NULL;
 static bool s_gatts_registered = false;
+static bool s_advertising = false;
 static esp_gatt_if_t s_gatts_if;
 
 const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
@@ -89,6 +101,17 @@ static esp_ble_adv_params_t mos_adv_params = {
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
 
+static esp_ble_scan_params_t ble_scan_params = {
+    .scan_type = BLE_SCAN_TYPE_ACTIVE,
+    .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
+    .scan_filter_policy = BLE_SCAN_FILTER_ALLOW_ALL,
+    .scan_interval = 0x50, /* 0x50 * 0.625 = 50 ms */
+    .scan_window = 0x30,   /* 0x30 * 0.625 = 30 ms */
+};
+
+static void mgos_bt_ble_scan_done(int num_res,
+                                  struct mgos_bt_ble_scan_result *res);
+
 const char *mgos_bt_addr_to_str(const esp_bd_addr_t bda, char *out) {
   sprintf(out, "%02x:%02x:%02x:%02x:%02x:%02x", bda[0], bda[1], bda[2], bda[3],
           bda[4], bda[5]);
@@ -121,6 +144,10 @@ const char *mgos_bt_uuid_to_str(const esp_bt_uuid_t *uuid, char *out) {
     default: { sprintf(out, "?(%u)", uuid->len); }
   }
   return out;
+}
+
+static enum cs_log_level ll_from_status(esp_bt_status_t status) {
+  return (status == ESP_BT_STATUS_SUCCESS ? LL_DEBUG : LL_ERROR);
 }
 
 static void esp32_bt_register_services(void) {
@@ -171,7 +198,7 @@ static struct esp32_bt_connection_entry *find_connection(esp_gatt_if_t gatt_if,
 static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatt_if,
                               esp_ble_gatts_cb_param_t *ep) {
   esp_err_t r;
-  char buf[BT_UUID_STR_LEN];
+  char buf[BT_ADDR_STR_LEN];
   switch (ev) {
     case ESP_GATTS_REG_EVT: {
       const struct gatts_reg_evt_param *p = &ep->reg;
@@ -319,7 +346,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatt_if,
       conn_params.timeout = 400;  /* timeout = 400*10ms = 4000ms */
       esp_ble_gap_update_conn_params(&conn_params);
       /* Resume advertising */
-      if (get_cfg()->bt.adv_enable) {
+      if (get_cfg()->bt.adv_enable && !s_scan_in_progress) {
         esp_ble_gap_start_advertising(&mos_adv_params);
       }
       struct esp32_bt_connection_entry *ce =
@@ -358,7 +385,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatt_if,
         SLIST_REMOVE(&s_conns, ce, esp32_bt_connection_entry, next);
         free(ce);
       }
-      if (get_cfg()->bt.adv_enable) {
+      if (get_cfg()->bt.adv_enable && !s_scan_in_progress) {
         esp_ble_gap_start_advertising(&mos_adv_params);
       }
       break;
@@ -427,11 +454,14 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatt_if,
 
 static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
                             esp_ble_gap_cb_param_t *ep) {
+  char buf[BT_UUID_STR_LEN];
   switch (ev) {
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT: {
       const struct ble_adv_data_cmpl_evt_param *p = &ep->adv_data_cmpl;
       LOG(LL_DEBUG, ("ADV_DATA_SET_COMPLETE st %d", p->status));
-      esp_ble_gap_start_advertising(&mos_adv_params);
+      if (get_cfg()->bt.adv_enable && !s_scan_in_progress) {
+        esp_ble_gap_start_advertising(&mos_adv_params);
+      }
       break;
     }
     case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT: {
@@ -442,11 +472,64 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
     }
     case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT: {
       const struct ble_scan_param_cmpl_evt_param *p = &ep->scan_param_cmpl;
-      LOG(LL_DEBUG, ("SCAN_PARAM_SET_COMPLETE st %d", p->status));
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("SCAN_PARAM_SET_COMPLETE st %d", p->status));
+      if (p->status != ESP_BT_STATUS_SUCCESS) {
+        mgos_bt_ble_scan_done(-2, NULL);
+        break;
+      }
+      /*
+       * Scanning and advertising is incompatible.
+       * If we are advertising, suspend to perform a scan.
+       */
+      if (s_advertising) {
+        if (esp_ble_gap_stop_advertising() != ESP_OK) {
+          mgos_bt_ble_scan_done(-3, NULL);
+        }
+      } else {
+        if (esp_ble_gap_start_scanning(MGOS_BT_BLE_SCAN_DURATION) != ESP_OK) {
+          mgos_bt_ble_scan_done(-4, NULL);
+        }
+      }
       break;
     }
     case ESP_GAP_BLE_SCAN_RESULT_EVT: {
-      LOG(LL_DEBUG, ("SCAN_RESULT"));
+      struct ble_scan_result_evt_param *p = &ep->scan_rst;
+      switch (p->search_evt) {
+        case ESP_GAP_SEARCH_INQ_RES_EVT: {
+          uint8_t name_len = 0;
+          uint8_t *name = esp_ble_resolve_adv_data(
+              p->ble_adv, ESP_BLE_AD_TYPE_NAME_CMPL, &name_len);
+          LOG(LL_DEBUG,
+              ("SCAN_RESULT addr %s name %.*s type %d RSSI %d",
+               mgos_bt_addr_to_str(p->bda, buf), (int) name_len,
+               (name ? (const char *) name : ""), p->dev_type, p->rssi));
+          struct mgos_bt_ble_scan_result *r = NULL;
+          for (int i = 0; i < s_num_scan_results; i++) {
+            if (memcmp(&s_scan_results[i].addr, &p->bda, sizeof(p->bda)) == 0) {
+              r = &s_scan_results[i];
+              break;
+            }
+          }
+          if (r == NULL) {
+            s_num_scan_results++;
+            s_scan_results =
+                realloc(s_scan_results, s_num_scan_results * sizeof(*r));
+            r = &s_scan_results[s_num_scan_results - 1];
+          }
+          memset(r, 0, sizeof(*r));
+          memcpy(&r->addr, &p->bda, sizeof(r->addr));
+          memcpy(r->name, name, name_len);
+          r->rssi = p->rssi;
+          break;
+        }
+        case ESP_GAP_SEARCH_INQ_CMPL_EVT: {
+          LOG(LL_DEBUG, ("SCAN_COMPLETE %d", s_num_scan_results));
+          mgos_bt_ble_scan_done(s_num_scan_results, s_scan_results);
+          break;
+        }
+        default: { LOG(LL_DEBUG, ("SCAN_RESULT %d", p->search_evt)); }
+      }
       break;
     }
     case ESP_GAP_BLE_ADV_DATA_RAW_SET_COMPLETE_EVT: {
@@ -462,12 +545,20 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
     }
     case ESP_GAP_BLE_ADV_START_COMPLETE_EVT: {
       const struct ble_adv_start_cmpl_evt_param *p = &ep->adv_start_cmpl;
-      LOG(LL_DEBUG, ("ADV_START_COMPLETE st %d", p->status));
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("ADV_START_COMPLETE st %d", p->status));
+      if (p->status == ESP_BT_STATUS_SUCCESS) {
+        s_advertising = true;
+      }
       break;
     }
     case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT: {
       const struct ble_scan_start_cmpl_evt_param *p = &ep->scan_start_cmpl;
-      LOG(LL_DEBUG, ("SCAN_START_COMPLETE st %d", p->status));
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("SCAN_START_COMPLETE st %d", p->status));
+      if (p->status != ESP_BT_STATUS_SUCCESS) {
+        mgos_bt_ble_scan_done(-3, NULL);
+      }
       break;
     }
     case ESP_GAP_BLE_AUTH_CMPL_EVT: {
@@ -508,12 +599,22 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
     }
     case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT: {
       const struct ble_adv_stop_cmpl_evt_param *p = &ep->adv_stop_cmpl;
-      LOG(LL_DEBUG, ("ADV_STOP_COMPLETE st %d", p->status));
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("ADV_STOP_COMPLETE st %d", p->status));
+      if (p->status == ESP_BT_STATUS_SUCCESS) {
+        s_advertising = false;
+      }
+      if (s_scan_in_progress) {
+        if (esp_ble_gap_start_scanning(MGOS_BT_BLE_SCAN_DURATION) != ESP_OK) {
+          mgos_bt_ble_scan_done(-5, NULL);
+        }
+      }
       break;
     }
     case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT: {
       const struct ble_scan_stop_cmpl_evt_param *p = &ep->scan_stop_cmpl;
-      LOG(LL_DEBUG, ("SCAN_STOP_COMPLETE st %d", p->status));
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("SCAN_STOP_COMPLETE st %d", p->status));
       break;
     }
     case ESP_GAP_BLE_SET_STATIC_RAND_ADDR_EVT: {
@@ -563,6 +664,39 @@ static void mgos_bt_net_ev(enum mgos_net_event ev,
     esp_bt_controller_disable(ESP_BT_MODE_BTDM);
   }
   (void) arg;
+}
+
+static void mgos_bt_ble_scan_done(int num_res,
+                                  struct mgos_bt_ble_scan_result *res) {
+  s_scan_in_progress = false;
+  s_scan_results = NULL;
+  s_num_scan_results = 0;
+  if (get_cfg()->bt.adv_enable && !s_advertising) { /* Resume advertising */
+    esp_ble_gap_start_advertising(&mos_adv_params);
+  }
+  SLIST_HEAD(scan_cbs, cb_info) scan_cbs;
+  memcpy(&scan_cbs, &s_scan_cbs, sizeof(scan_cbs));
+  memset(&s_scan_cbs, 0, sizeof(s_scan_cbs));
+  struct cb_info *cbi, *cbit;
+  SLIST_FOREACH_SAFE(cbi, &scan_cbs, next, cbit) {
+    ((mgos_bt_ble_scan_cb_t) cbi->cb)(num_res, res, cbi->arg);
+    free(cbi);
+  }
+  free(res);
+}
+
+void mgos_bt_ble_scan(mgos_bt_ble_scan_cb_t cb, void *arg) {
+  struct cb_info *cbi = (struct cb_info *) calloc(1, sizeof(*cbi));
+  if (cbi == NULL) return;
+  cbi->cb = cb;
+  cbi->arg = arg;
+  SLIST_INSERT_HEAD(&s_scan_cbs, cbi, next);
+  if (!s_scan_in_progress) {
+    s_scan_in_progress = true;
+    if (esp_ble_gap_set_scan_params(&ble_scan_params) != ESP_OK) {
+      mgos_bt_ble_scan_done(-1, NULL);
+    }
+  }
 }
 
 bool mgos_bt_common_init(void) {

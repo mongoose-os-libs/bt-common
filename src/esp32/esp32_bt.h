@@ -19,6 +19,8 @@
 extern "C" {
 #endif
 
+#define MGOS_BT_DEV_NAME_LEN 32
+
 const uint16_t primary_service_uuid;
 const uint16_t char_decl_uuid;
 const uint8_t char_prop_read_write;
@@ -47,6 +49,18 @@ typedef bool (*mgos_bt_gatts_handler_t)(struct esp32_bt_session *bs,
 bool mgos_bt_gatts_register_service(const esp_gatts_attr_db_t *svc_descr,
                                     size_t num_attrs,
                                     mgos_bt_gatts_handler_t cb);
+
+struct mgos_bt_ble_scan_result {
+  esp_bd_addr_t addr;
+  char name[MGOS_BT_DEV_NAME_LEN + 1]; /* NUL-terminated */
+  int rssi;
+};
+
+typedef void (*mgos_bt_ble_scan_cb_t)(int num_res,
+                                      const struct mgos_bt_ble_scan_result *res,
+                                      void *arg);
+
+void mgos_bt_ble_scan(mgos_bt_ble_scan_cb_t cb, void *arg);
 
 bool esp32_bt_init(void);
 
