@@ -62,8 +62,6 @@ typedef void (*mgos_bt_ble_scan_cb_t)(int num_res,
 
 void mgos_bt_ble_scan(mgos_bt_ble_scan_cb_t cb, void *arg);
 
-bool esp32_bt_init(void);
-
 #ifdef __cplusplus
 }
 #endif
