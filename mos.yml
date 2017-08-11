@@ -5,6 +5,9 @@ version: 1.0
 
 platforms: [ esp32 ]
 
+sources:
+  - src/${arch}
+
 config_schema:
   - ["bt", "o", {title: "Bluetooth settings"}]
   - ["bt.enable", "b", true, {title: "Enable BT"}]

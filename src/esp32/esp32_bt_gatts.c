@@ -32,21 +32,21 @@ struct esp32_bt_service_entry {
   SLIST_ENTRY(esp32_bt_service_entry) next;
 };
 
-struct esp32_bt_session_entry {
+struct esp32_gatts_session_entry {
   struct esp32_bt_session bs;
   struct esp32_bt_service_entry *se;
-  SLIST_ENTRY(esp32_bt_session_entry) next;
+  SLIST_ENTRY(esp32_gatts_session_entry) next;
 };
 
-struct esp32_bt_connection_entry {
+struct esp32_gatts_connection_entry {
   struct esp32_bt_connection bc;
-  SLIST_HEAD(sessions, esp32_bt_session_entry) sessions;
-  SLIST_ENTRY(esp32_bt_connection_entry) next;
+  SLIST_HEAD(sessions, esp32_gatts_session_entry) sessions;
+  SLIST_ENTRY(esp32_gatts_connection_entry) next;
 };
 
 static SLIST_HEAD(s_svcs, esp32_bt_service_entry) s_svcs =
     SLIST_HEAD_INITIALIZER(s_svcs);
-static SLIST_HEAD(s_conns, esp32_bt_connection_entry) s_conns =
+static SLIST_HEAD(s_conns, esp32_gatts_connection_entry) s_conns =
     SLIST_HEAD_INITIALIZER(s_conns);
 
 static const char *s_dev_name = NULL;
@@ -113,9 +113,9 @@ static struct esp32_bt_service_entry *find_service_by_attr_handle(
   return NULL;
 }
 
-static struct esp32_bt_connection_entry *find_connection(esp_gatt_if_t gatt_if,
-                                                         uint16_t conn_id) {
-  struct esp32_bt_connection_entry *ce = NULL;
+static struct esp32_gatts_connection_entry *find_connection(
+    esp_gatt_if_t gatt_if, uint16_t conn_id) {
+  struct esp32_gatts_connection_entry *ce = NULL;
   SLIST_FOREACH(ce, &s_conns, next) {
     if (ce->bc.gatt_if == gatt_if && ce->bc.conn_id == conn_id) return ce;
   }
@@ -148,12 +148,12 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
                      (p->need_rsp ? " need_rsp" : "")));
       if (!p->need_rsp) break;
       bool ret = false;
-      struct esp32_bt_connection_entry *ce =
+      struct esp32_gatts_connection_entry *ce =
           find_connection(gatts_if, p->conn_id);
       if (ce != NULL) {
         struct esp32_bt_service_entry *se =
             find_service_by_attr_handle(p->handle);
-        struct esp32_bt_session_entry *sse;
+        struct esp32_gatts_session_entry *sse;
         SLIST_FOREACH(sse, &ce->sessions, next) {
           if (sse->se == se) {
             ret = sse->se->cb(&sse->bs, ev, ep);
@@ -176,12 +176,12 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
                      (p->need_rsp ? " need_rsp" : "")));
       if (!p->need_rsp) break;
       bool ret = false;
-      struct esp32_bt_connection_entry *ce =
+      struct esp32_gatts_connection_entry *ce =
           find_connection(gatts_if, p->conn_id);
       if (ce != NULL) {
         struct esp32_bt_service_entry *se =
             find_service_by_attr_handle(p->handle);
-        struct esp32_bt_session_entry *sse;
+        struct esp32_gatts_session_entry *sse;
         SLIST_FOREACH(sse, &ce->sessions, next) {
           if (sse->se == se) {
             ret = sse->se->cb(&sse->bs, ev, ep);
@@ -203,7 +203,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
     case ESP_GATTS_MTU_EVT: {
       const struct gatts_mtu_evt_param *p = &ep->mtu;
       LOG(LL_DEBUG, ("MTU cid %d mtu %d", p->conn_id, p->mtu));
-      struct esp32_bt_connection_entry *ce =
+      struct esp32_gatts_connection_entry *ce =
           find_connection(gatts_if, p->conn_id);
       if (ce != NULL) ce->bc.mtu = p->mtu;
       break;
@@ -285,8 +285,8 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       if (get_cfg()->bt.adv_enable && !is_scanning()) {
         start_advertising();
       }
-      struct esp32_bt_connection_entry *ce =
-          (struct esp32_bt_connection_entry *) calloc(1, sizeof(*ce));
+      struct esp32_gatts_connection_entry *ce =
+          (struct esp32_gatts_connection_entry *) calloc(1, sizeof(*ce));
       ce->bc.gatt_if = gatts_if;
       ce->bc.conn_id = p->conn_id;
       ce->bc.mtu = ESP_GATT_DEF_BLE_MTU_SIZE;
@@ -294,8 +294,8 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       /* Create a session for each of the currently registered services. */
       struct esp32_bt_service_entry *se;
       SLIST_FOREACH(se, &s_svcs, next) {
-        struct esp32_bt_session_entry *sse =
-            (struct esp32_bt_session_entry *) calloc(1, sizeof(*sse));
+        struct esp32_gatts_session_entry *sse =
+            (struct esp32_gatts_session_entry *) calloc(1, sizeof(*sse));
         sse->se = se;
         sse->bs.bc = &ce->bc;
         SLIST_INSERT_HEAD(&ce->sessions, sse, next);
@@ -310,15 +310,15 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
                     mgos_bt_addr_to_str(p->remote_bda, buf),
                     (p->is_connected ? " connected" : "")));
 
-      struct esp32_bt_connection_entry *ce =
+      struct esp32_gatts_connection_entry *ce =
           find_connection(gatts_if, p->conn_id);
       if (ce != NULL) {
-        struct esp32_bt_session_entry *sse, *sset;
+        struct esp32_gatts_session_entry *sse, *sset;
         SLIST_FOREACH_SAFE(sse, &ce->sessions, next, sset) {
           sse->se->cb(&sse->bs, ev, ep);
           free(sse);
         }
-        SLIST_REMOVE(&s_conns, ce, esp32_bt_connection_entry, next);
+        SLIST_REMOVE(&s_conns, ce, esp32_gatts_connection_entry, next);
         free(ce);
       }
       if (get_cfg()->bt.adv_enable && !is_scanning()) {

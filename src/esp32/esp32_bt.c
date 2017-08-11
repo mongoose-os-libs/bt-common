@@ -16,6 +16,8 @@
 #include "esp_bt_main.h"
 #include "esp_gap_ble_api.h"
 
+#include "common/mg_str.h"
+
 #include "mgos_net.h"
 #include "mgos_sys_config.h"
 
@@ -48,10 +50,25 @@ static SLIST_HEAD(s_scan_cbs, cb_info) s_scan_cbs;
 static bool s_scan_in_progress = false;
 static struct mgos_bt_ble_scan_result *s_scan_results = NULL;
 static int s_num_scan_results = 0;
-const char *mgos_bt_addr_to_str(const esp_bd_addr_t bda, char *out) {
-  sprintf(out, "%02x:%02x:%02x:%02x:%02x:%02x", bda[0], bda[1], bda[2], bda[3],
-          bda[4], bda[5]);
+
+const char *mgos_bt_addr_to_str(const esp_bd_addr_t addr, char *out) {
+  sprintf(out, "%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2],
+          addr[3], addr[4], addr[5]);
   return out;
+}
+
+bool mgos_bt_addr_from_str(const struct mg_str addr_str, esp_bd_addr_t addr) {
+  unsigned int a[6];
+  struct mg_str addr_str_nul = mg_strdup_nul(addr_str);
+  bool result = (sscanf(addr_str_nul.p, "%02x:%02x:%02x:%02x:%02x:%02x", &a[0],
+                        &a[1], &a[2], &a[3], &a[4], &a[5]) == 6);
+  if (result) {
+    for (int i = 0; i < 6; i++) {
+      addr[i] = a[i];
+    }
+  }
+  free((void *) addr_str_nul.p);
+  return result;
 }
 
 const char *bt_uuid128_to_str(const uint8_t *u, char *out) {
@@ -82,6 +99,70 @@ const char *mgos_bt_uuid_to_str(const esp_bt_uuid_t *uuid, char *out) {
   return out;
 }
 
+bool mgos_bt_uuid_from_str(const struct mg_str uuid_str, esp_bt_uuid_t *uuid) {
+  bool result = false;
+  struct mg_str uuid_str_nul = mg_strdup_nul(uuid_str);
+  if (uuid_str.len == 36) {
+    unsigned int u[16];
+    if (sscanf(uuid_str_nul.p,
+               "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-"
+               "%02x%02x%02x%02x%02x%02x",
+               &u[15], &u[14], &u[13], &u[12], &u[11], &u[10], &u[9], &u[8],
+               &u[7], &u[6], &u[5], &u[4], &u[3], &u[2], &u[1], &u[0]) == 16) {
+      result = true;
+      uuid->len = ESP_UUID_LEN_128;
+      for (int i = 0; i < 16; i++) {
+        uuid->uuid.uuid128[i] = u[i];
+      }
+    }
+  } else if (uuid_str.len <= 8) {
+    unsigned int u;
+    if (sscanf(uuid_str_nul.p, "%08x", &u) == 1) {
+      result = true;
+      if (u & 0xffff0000) {
+        uuid->len = ESP_UUID_LEN_32;
+        uuid->uuid.uuid32 = u;
+      } else {
+        uuid->len = ESP_UUID_LEN_16;
+        uuid->uuid.uuid16 = u;
+      }
+    }
+  }
+  free((void *) uuid_str_nul.p);
+  return result;
+}
+
+int mgos_bt_uuid_cmp(const esp_bt_uuid_t *a, const esp_bt_uuid_t *b) {
+  int result = 0;
+  if (a->len == ESP_UUID_LEN_128 || b->len == ESP_UUID_LEN_128) {
+    /* 128-bit UUID is always > 16 or 32-bit */
+    if (a->len != ESP_UUID_LEN_128 && b->len == ESP_UUID_LEN_128) {
+      result = -1;
+    } else if (a->len == ESP_UUID_LEN_128 && b->len != ESP_UUID_LEN_128) {
+      result = 1;
+    } else {
+      for (int i = 15; i >= 0; i--) {
+        uint8_t va = a->uuid.uuid128[i];
+        uint8_t vb = b->uuid.uuid128[i];
+        if (va != vb) {
+          result = (va > vb ? 1 : -1);
+          break;
+        }
+      }
+    }
+  } else {
+    uint32_t va, vb;
+    va = (a->len == ESP_UUID_LEN_16 ? a->uuid.uuid16 : a->uuid.uuid32);
+    vb = (b->len == ESP_UUID_LEN_16 ? b->uuid.uuid16 : b->uuid.uuid32);
+    if (va < vb) {
+      result = -1;
+    } else if (va > vb) {
+      result = 1;
+    }
+  }
+  return result;
+}
+
 enum cs_log_level ll_from_status(esp_bt_status_t status) {
   return (status == ESP_BT_STATUS_SUCCESS ? LL_DEBUG : LL_ERROR);
 }
@@ -103,6 +184,7 @@ static void mgos_bt_ble_scan_done(int num_res,
   s_scan_in_progress = false;
   s_scan_results = NULL;
   s_num_scan_results = 0;
+  LOG(LL_INFO, ("BLE scan done, %d", num_res));
   if (get_cfg()->bt.adv_enable && !is_advertising()) { /* Resume advertising */
     start_advertising();
   }
@@ -214,6 +296,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
       LOG(ll, ("ADV_START_COMPLETE st %d", p->status));
       if (p->status == ESP_BT_STATUS_SUCCESS) {
         s_advertising = true;
+        LOG(LL_INFO, ("BLE advertising started"));
       }
       break;
     }
@@ -224,6 +307,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
       if (p->status != ESP_BT_STATUS_SUCCESS) {
         mgos_bt_ble_scan_done(-3, NULL);
       }
+      LOG(LL_INFO, ("BLE scan started"));
       break;
     }
     case ESP_GAP_BLE_AUTH_CMPL_EVT: {
@@ -268,6 +352,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
       LOG(ll, ("ADV_STOP_COMPLETE st %d", p->status));
       if (p->status == ESP_BT_STATUS_SUCCESS) {
         s_advertising = false;
+        LOG(LL_INFO, ("BLE advertising stopped"));
       }
       if (is_scanning()) {
         if (esp_ble_gap_start_scanning(MGOS_BT_BLE_SCAN_DURATION) != ESP_OK) {
@@ -375,8 +460,7 @@ bool mgos_bt_common_init(void) {
     ret = false;
   }
 
-  LOG(LL_INFO, ("Bluetooth init ok, advertising %s",
-                (btcfg->adv_enable ? "enabled" : "disabled")));
+  LOG(LL_INFO, ("Bluetooth init ok"));
   ret = true;
 
 out:
