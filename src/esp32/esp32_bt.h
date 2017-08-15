@@ -32,6 +32,8 @@ const uint8_t char_prop_write;
 
 const char *mgos_bt_addr_to_str(const esp_bd_addr_t addr, char *out);
 bool mgos_bt_addr_from_str(const struct mg_str addr_str, esp_bd_addr_t addr);
+int mgos_bt_addr_cmp(const esp_bd_addr_t a, const esp_bd_addr_t b);
+bool mgos_bt_addr_is_null(const esp_bd_addr_t a);
 
 const char *mgos_bt_uuid_to_str(const esp_bt_uuid_t *uuid, char *out);
 bool mgos_bt_uuid_from_str(const struct mg_str uuid_str, esp_bt_uuid_t *uuid);
@@ -65,6 +67,8 @@ struct mgos_bt_ble_scan_result {
 typedef void (*mgos_bt_ble_scan_cb_t)(int num_res,
                                       const struct mgos_bt_ble_scan_result *res,
                                       void *arg);
+void mgos_bt_ble_scan_device(const esp_bd_addr_t addr, mgos_bt_ble_scan_cb_t cb,
+                             void *cb_arg);
 void mgos_bt_ble_scan(mgos_bt_ble_scan_cb_t cb, void *cb_arg);
 
 typedef void (*mgos_bt_gattc_open_cb)(int conn_id, bool result, void *arg);

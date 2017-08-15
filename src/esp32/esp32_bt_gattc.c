@@ -85,22 +85,24 @@ static int s_conn_id = 0;
 static esp_gatt_if_t s_gattc_if = 0;
 
 static struct esp32_gattc_connection_entry *find_connection_by_addr(
-    esp_gatt_if_t gatt_if, const esp_bd_addr_t addr) {
+    const esp_bd_addr_t addr, bool pending) {
   struct esp32_gattc_connection_entry *ce = NULL;
   SLIST_FOREACH(ce, &s_conns, next) {
-    if (ce->bc.gatt_if == gatt_if &&
-        ce->bc.conn_id == INVALID_ESP_CONNECTION_ID &&
-        memcmp(ce->bc.peer_addr, addr, ESP_BD_ADDR_LEN) == 0)
+    if (ce->bc.gatt_if == s_gattc_if &&
+        mgos_bt_addr_cmp(ce->bc.peer_addr, addr) == 0 &&
+        (!pending || ce->bc.conn_id == INVALID_ESP_CONNECTION_ID)) {
       return ce;
+    }
   }
   return NULL;
 }
 
 static struct esp32_gattc_connection_entry *find_connection_by_esp_conn_id(
-    esp_gatt_if_t gatt_if, uint16_t esp_conn_id) {
+    uint16_t esp_conn_id) {
   struct esp32_gattc_connection_entry *ce = NULL;
   SLIST_FOREACH(ce, &s_conns, next) {
-    if (ce->bc.gatt_if == gatt_if && ce->bc.conn_id == esp_conn_id) return ce;
+    if (ce->bc.gatt_if == s_gattc_if && ce->bc.conn_id == esp_conn_id)
+      return ce;
   }
   return NULL;
 }
@@ -148,7 +150,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
       LOG(ll, ("OPEN st %d cid %d addr %s mtu %d", p->status, p->conn_id,
                mgos_bt_addr_to_str(p->remote_bda, buf), p->mtu));
       struct esp32_gattc_connection_entry *ce =
-          find_connection_by_addr(gattc_if, p->remote_bda);
+          find_connection_by_addr(p->remote_bda, true /* pending */);
       if (ce == NULL) break;
       ce->bc.conn_id = p->conn_id;
       if (p->status != ESP_GATT_OK) {
@@ -177,7 +179,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
            mgos_bt_uuid_to_str(&p->char_id.uuid, buf2), p->value_type,
            p->value_len));
       struct esp32_gattc_connection_entry *ce =
-          find_connection_by_esp_conn_id(gattc_if, p->conn_id);
+          find_connection_by_esp_conn_id(p->conn_id);
       if (ce == NULL) break;
       struct esp32_gattc_read_char_ctx *rc;
       STAILQ_FOREACH(rc, &ce->read_reqs, next) {
@@ -209,7 +211,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
                mgos_bt_uuid_to_str(&p->srvc_id.id.uuid, buf),
                mgos_bt_uuid_to_str(&p->char_id.uuid, buf2)));
       struct esp32_gattc_connection_entry *ce =
-          find_connection_by_esp_conn_id(gattc_if, p->conn_id);
+          find_connection_by_esp_conn_id(p->conn_id);
       if (ce == NULL) break;
       struct esp32_gattc_write_char_ctx *wc;
       STAILQ_FOREACH(wc, &ce->write_reqs, next) {
@@ -230,7 +232,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
       LOG(ll, ("CLOSE st %d cid %d addr %s reason %d", p->status, p->conn_id,
                mgos_bt_addr_to_str(p->remote_bda, buf), p->reason));
       struct esp32_gattc_connection_entry *ce =
-          find_connection_by_esp_conn_id(gattc_if, p->conn_id);
+          find_connection_by_esp_conn_id(p->conn_id);
       if (ce == NULL) break;
       remove_connection(ce);
       break;
@@ -242,7 +244,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
            mgos_bt_uuid_to_str(&p->srvc_id.id.uuid, buf), p->srvc_id.id.inst_id,
            (p->srvc_id.is_primary ? " primary" : "")));
       struct esp32_gattc_connection_entry *ce =
-          find_connection_by_esp_conn_id(gattc_if, p->conn_id);
+          find_connection_by_esp_conn_id(p->conn_id);
       if (ce == NULL) break;
       struct esp32_gattc_list_svcs_ctx *ls_ctx = ce->ls_ctx;
       if (ls_ctx == NULL) break;
@@ -262,7 +264,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll, ("SEARCH_CMPL st %d cid %d", p->status, p->conn_id));
       struct esp32_gattc_connection_entry *ce =
-          find_connection_by_esp_conn_id(gattc_if, p->conn_id);
+          find_connection_by_esp_conn_id(p->conn_id);
       if (ce == NULL) break;
       ls_done(ce);
       break;
@@ -327,7 +329,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll, ("CFG_MTU st %d cid %d mtu %d", p->status, p->conn_id, p->mtu));
       struct esp32_gattc_connection_entry *ce =
-          find_connection_by_esp_conn_id(gattc_if, p->conn_id);
+          find_connection_by_esp_conn_id(p->conn_id);
       if (ce == NULL) break;
       ce->bc.mtu = p->mtu;
       ce->open_cb(ce->conn_id, (p->status == ESP_GATT_OK), ce->open_cb_arg);
@@ -406,7 +408,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
                p->conn_id, mgos_bt_uuid_to_str(&p->srvc_id.id.uuid, buf),
                mgos_bt_uuid_to_str(&p->char_id.uuid, buf2), p->char_prop));
       struct esp32_gattc_connection_entry *ce =
-          find_connection_by_esp_conn_id(gattc_if, p->conn_id);
+          find_connection_by_esp_conn_id(p->conn_id);
       if (ce == NULL) break;
       /* When there are no more characteristics to list we get ESP_GATT_ERROR */
       if (p->status != ESP_GATT_OK) {
@@ -480,11 +482,33 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
   }
 }
 
+static void gattc_open_scan_cb(int num_res,
+                               const struct mgos_bt_ble_scan_result *res,
+                               void *arg) {
+  char buf[BT_ADDR_STR_LEN];
+  struct esp32_gattc_connection_entry *ce =
+      (struct esp32_gattc_connection_entry *) arg;
+  if (num_res <= 0) {
+    LOG(LL_ERROR, ("%s not found (%d)",
+                   mgos_bt_addr_to_str(ce->bc.peer_addr, buf), num_res));
+    ce->open_cb(ce->conn_id, false, ce->open_cb_arg);
+    remove_connection(ce);
+    return;
+  }
+  LOG(LL_INFO, ("%s found, RSSI %d", mgos_bt_addr_to_str(ce->bc.peer_addr, buf),
+                res->rssi));
+  if (esp_ble_gattc_open(ce->bc.gatt_if, ce->bc.peer_addr,
+                         true /* is_direct */) != ESP_OK) {
+    ce->open_cb(ce->conn_id, false, ce->open_cb_arg);
+    remove_connection(ce);
+  }
+}
+
 void mgos_bt_gattc_open(const esp_bd_addr_t addr, int mtu,
                         mgos_bt_gattc_open_cb cb, void *cb_arg) {
   char buf[BT_ADDR_STR_LEN];
   struct esp32_gattc_connection_entry *ce =
-      find_connection_by_addr(s_gattc_if, addr);
+      find_connection_by_addr(addr, false /* pending */);
   if (ce != NULL) {
     /*
      * Note: ESP GATTC API seems to imply that multiple connections to the same
@@ -496,13 +520,14 @@ void mgos_bt_gattc_open(const esp_bd_addr_t addr, int mtu,
      * already a connection.
      * TODO(rojer): Figure it out.
      */
-    LOG(LL_ERROR,
-        ("Multiple BLE connections to the same address are not supported"));
-    cb(-1, false, cb_arg);
+    LOG(LL_ERROR, ("Multiple BLE connections to the same address are not "
+                   "supported (conn_id %d)",
+                   ce->conn_id));
+    cb(ce->conn_id, false, cb_arg);
     return;
   }
   ce = (struct esp32_gattc_connection_entry *) calloc(1, sizeof(*ce));
-  if (ce == NULL) return NULL;
+  if (ce == NULL) return;
   ce->conn_id = s_conn_id++;
   ce->bc.conn_id = INVALID_ESP_CONNECTION_ID;
   ce->bc.gatt_if = s_gattc_if;
@@ -514,14 +539,10 @@ void mgos_bt_gattc_open(const esp_bd_addr_t addr, int mtu,
   STAILQ_INIT(&ce->write_reqs);
   SLIST_INSERT_HEAD(&s_conns, ce, next);
   if (is_advertising()) esp_ble_gap_stop_advertising();
-  LOG(LL_INFO,
-      ("Connecting to %s", mgos_bt_addr_to_str(ce->bc.peer_addr, buf)));
-  if (esp_ble_gattc_open(ce->bc.gatt_if, ce->bc.peer_addr,
-                         true /* is_direct */) != ESP_OK) {
-    SLIST_REMOVE(&s_conns, ce, esp32_gattc_connection_entry, next);
-    free(ce);
-    cb(-1, false, cb_arg);
-  }
+  /* Due to https://github.com/espressif/esp-idf/issues/908 we cannot call
+   * esp_ble_gattc_open right away and have to scan for the device first. */
+  LOG(LL_INFO, ("Looking for %s", mgos_bt_addr_to_str(ce->bc.peer_addr, buf)));
+  mgos_bt_ble_scan_device(ce->bc.peer_addr, gattc_open_scan_cb, ce);
 }
 
 static void ls_done_mgos_cb(void *arg) {
