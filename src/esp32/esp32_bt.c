@@ -25,8 +25,8 @@
 static bool s_advertising = false;
 
 static esp_ble_adv_params_t mos_adv_params = {
-    .adv_int_min = 0x100, /* 0x100 * 0.625 = 100 ms */
-    .adv_int_max = 0x200, /* 0x200 * 0.625 = 200 ms */
+    .adv_int_min = 0x50,  /* 0x100 * 0.625 = 100 ms */
+    .adv_int_max = 0x100, /* 0x200 * 0.625 = 200 ms */
     .adv_type = ADV_TYPE_IND,
     .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
     .channel_map = ADV_CHNL_ALL,
@@ -39,11 +39,12 @@ static esp_ble_scan_params_t ble_scan_params = {
     .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
     .scan_filter_policy = BLE_SCAN_FILTER_ALLOW_ALL,
     .scan_interval = 0x100, /* 0x100 * 0.625 = 100 ms */
-    .scan_window = 0x50,    /* 0x50 * 0.625 = 50 ms */
+    .scan_window = 0x80,    /* 0x50 * 0.625 = 50 ms */
 };
 
 struct scan_cb_info {
-  esp_bd_addr_t target;
+  esp_bd_addr_t target_addr;
+  struct mg_str target_name;
   mgos_bt_ble_scan_cb_t cb;
   void *cb_arg;
   SLIST_ENTRY(scan_cb_info) next;
@@ -269,7 +270,10 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
           /* See if there are any scans waiting for this specific device */
           struct scan_cb_info *cbi, *cbit;
           SLIST_FOREACH_SAFE(cbi, &sctx->cbs, next, cbit) {
-            if (mgos_bt_addr_cmp(r->addr, cbi->target) == 0) {
+            if (mgos_bt_addr_cmp(r->addr, cbi->target_addr) == 0 ||
+                (name_len > 0 &&
+                 mg_strcmp(mg_mk_str_n(r->name, name_len), cbi->target_name) ==
+                     0)) {
               /* Create a copy of this one result and fire the callback. */
               struct scan_ctx *tsctx =
                   (struct scan_ctx *) calloc(1, sizeof(*tsctx));
@@ -410,11 +414,15 @@ static void scan_done_mgos_cb(void *arg) {
   SLIST_FOREACH_SAFE(cbi, &sctx->cbs, next, cbit) {
     if (cbi->cb == NULL) continue;
     int num_res = sctx->num_res;
-    if (!mgos_bt_addr_is_null(cbi->target) && num_res >= 1 &&
-        mgos_bt_addr_cmp(sctx->res->addr, cbi->target) != 0) {
+    if (num_res >= 1 &&
+        ((!mgos_bt_addr_is_null(cbi->target_addr) &&
+          mgos_bt_addr_cmp(sctx->res->addr, cbi->target_addr) != 0) ||
+         (cbi->target_name.len > 0 &&
+          mg_strcmp(mg_mk_str(sctx->res->name), cbi->target_name) != 0))) {
       num_res = 0;
     }
     cbi->cb(num_res, (num_res > 0 ? sctx->res : NULL), cbi->cb_arg);
+    free((void *) cbi->target_name.p);
     free(cbi);
   }
   free(sctx->res);
@@ -437,13 +445,15 @@ static void scan_done(int status) {
   scan_ctx_done(sctx, status);
 }
 
-void mgos_bt_ble_scan_device(const esp_bd_addr_t addr, mgos_bt_ble_scan_cb_t cb,
-                             void *cb_arg) {
+static void mgos_bt_ble_scan_device(const esp_bd_addr_t addr,
+                                    const struct mg_str name,
+                                    mgos_bt_ble_scan_cb_t cb, void *cb_arg) {
   struct scan_cb_info *cbi = (struct scan_cb_info *) calloc(1, sizeof(*cbi));
   if (cbi == NULL) return;
   cbi->cb = cb;
   cbi->cb_arg = cb_arg;
-  memcpy(cbi->target, addr, sizeof(cbi->target));
+  memcpy(cbi->target_addr, addr, sizeof(cbi->target_addr));
+  cbi->target_name = mg_strdup(name);
   if (s_scan_ctx == NULL) {
     struct scan_ctx *sctx = (struct scan_ctx *) calloc(1, sizeof(*sctx));
     SLIST_INSERT_HEAD(&sctx->cbs, cbi, next);
@@ -459,10 +469,24 @@ void mgos_bt_ble_scan_device(const esp_bd_addr_t addr, mgos_bt_ble_scan_cb_t cb,
   }
 }
 
-void mgos_bt_ble_scan(mgos_bt_ble_scan_cb_t cb, void *cb_arg) {
+void mgos_bt_ble_scan_device_addr(const esp_bd_addr_t addr,
+                                  mgos_bt_ble_scan_cb_t cb, void *cb_arg) {
+  struct mg_str name = MG_NULL_STR;
+  mgos_bt_ble_scan_device(addr, name, cb, cb_arg);
+}
+
+void mgos_bt_ble_scan_device_name(const struct mg_str name,
+                                  mgos_bt_ble_scan_cb_t cb, void *cb_arg) {
   esp_bd_addr_t addr;
   memset(&addr, 0, sizeof(addr));
-  mgos_bt_ble_scan_device(addr, cb, cb_arg);
+  mgos_bt_ble_scan_device(addr, name, cb, cb_arg);
+}
+
+void mgos_bt_ble_scan(mgos_bt_ble_scan_cb_t cb, void *cb_arg) {
+  struct mg_str name = MG_NULL_STR;
+  esp_bd_addr_t addr;
+  memset(&addr, 0, sizeof(addr));
+  mgos_bt_ble_scan_device(addr, name, cb, cb_arg);
 }
 
 static void mgos_bt_net_ev(enum mgos_net_event ev,

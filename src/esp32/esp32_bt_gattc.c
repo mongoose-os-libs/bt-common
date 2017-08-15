@@ -482,9 +482,17 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
   }
 }
 
-static void gattc_open_scan_cb(int num_res,
-                               const struct mgos_bt_ble_scan_result *res,
-                               void *arg) {
+static void gattc_open_do_open(struct esp32_gattc_connection_entry *ce) {
+  if (esp_ble_gattc_open(ce->bc.gatt_if, ce->bc.peer_addr,
+                         true /* is_direct */) != ESP_OK) {
+    ce->open_cb(ce->conn_id, false, ce->open_cb_arg);
+    remove_connection(ce);
+  }
+}
+
+static void gattc_open_addr_scan_cb(int num_res,
+                                    const struct mgos_bt_ble_scan_result *res,
+                                    void *arg) {
   char buf[BT_ADDR_STR_LEN];
   struct esp32_gattc_connection_entry *ce =
       (struct esp32_gattc_connection_entry *) arg;
@@ -497,15 +505,13 @@ static void gattc_open_scan_cb(int num_res,
   }
   LOG(LL_INFO, ("%s found, RSSI %d", mgos_bt_addr_to_str(ce->bc.peer_addr, buf),
                 res->rssi));
-  if (esp_ble_gattc_open(ce->bc.gatt_if, ce->bc.peer_addr,
-                         true /* is_direct */) != ESP_OK) {
-    ce->open_cb(ce->conn_id, false, ce->open_cb_arg);
-    remove_connection(ce);
-  }
+  gattc_open_do_open(ce);
 }
 
-void mgos_bt_gattc_open(const esp_bd_addr_t addr, int mtu,
-                        mgos_bt_gattc_open_cb cb, void *cb_arg) {
+static void mgos_bt_gattc_open_addr_internal(const esp_bd_addr_t addr,
+                                             bool need_scan, int mtu,
+                                             mgos_bt_gattc_open_cb cb,
+                                             void *cb_arg) {
   char buf[BT_ADDR_STR_LEN];
   struct esp32_gattc_connection_entry *ce =
       find_connection_by_addr(addr, false /* pending */);
@@ -541,8 +547,58 @@ void mgos_bt_gattc_open(const esp_bd_addr_t addr, int mtu,
   if (is_advertising()) esp_ble_gap_stop_advertising();
   /* Due to https://github.com/espressif/esp-idf/issues/908 we cannot call
    * esp_ble_gattc_open right away and have to scan for the device first. */
-  LOG(LL_INFO, ("Looking for %s", mgos_bt_addr_to_str(ce->bc.peer_addr, buf)));
-  mgos_bt_ble_scan_device(ce->bc.peer_addr, gattc_open_scan_cb, ce);
+  if (need_scan) {
+    LOG(LL_INFO,
+        ("Looking for %s", mgos_bt_addr_to_str(ce->bc.peer_addr, buf)));
+    mgos_bt_ble_scan_device_addr(ce->bc.peer_addr, gattc_open_addr_scan_cb, ce);
+  } else {
+    gattc_open_do_open(ce);
+  }
+}
+
+void mgos_bt_gattc_open_addr(const esp_bd_addr_t addr, int mtu,
+                             mgos_bt_gattc_open_cb cb, void *cb_arg) {
+  return mgos_bt_gattc_open_addr_internal(addr, true /* need_scan */, mtu, cb,
+                                          cb_arg);
+}
+
+struct open_name_ctx {
+  struct mg_str name;
+  int mtu;
+  mgos_bt_gattc_open_cb cb;
+  void *cb_arg;
+};
+
+static void gattc_open_name_scan_cb(int num_res,
+                                    const struct mgos_bt_ble_scan_result *res,
+                                    void *arg) {
+  struct open_name_ctx *octx = (struct open_name_ctx *) arg;
+  char buf[BT_ADDR_STR_LEN];
+  if (num_res > 0) {
+    LOG(LL_INFO,
+        ("%.*s found, addr %s, RSSI %d", (int) octx->name.len, octx->name.p,
+         mgos_bt_addr_to_str(res->addr, buf), res->rssi));
+    mgos_bt_gattc_open_addr_internal(res->addr, false /* need_scan */,
+                                     octx->mtu, octx->cb, octx->cb_arg);
+  } else {
+    LOG(LL_ERROR,
+        ("%.*s not found (%d)", (int) octx->name.len, octx->name.p, num_res));
+    octx->cb(-1, false, octx->cb_arg);
+  }
+  free((void *) octx->name.p);
+  free(octx);
+}
+
+void mgos_bt_gattc_open_name(const struct mg_str name, int mtu,
+                             mgos_bt_gattc_open_cb cb, void *cb_arg) {
+  struct open_name_ctx *octx =
+      (struct open_name_ctx *) calloc(1, sizeof(*octx));
+  octx->name = mg_strdup(name);
+  octx->mtu = mtu;
+  octx->cb = cb;
+  octx->cb_arg = cb_arg;
+  LOG(LL_INFO, ("Looking for %.*s", (int) name.len, name.p));
+  mgos_bt_ble_scan_device_name(name, gattc_open_name_scan_cb, octx);
 }
 
 static void ls_done_mgos_cb(void *arg) {

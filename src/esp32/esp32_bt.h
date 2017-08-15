@@ -67,13 +67,17 @@ struct mgos_bt_ble_scan_result {
 typedef void (*mgos_bt_ble_scan_cb_t)(int num_res,
                                       const struct mgos_bt_ble_scan_result *res,
                                       void *arg);
-void mgos_bt_ble_scan_device(const esp_bd_addr_t addr, mgos_bt_ble_scan_cb_t cb,
-                             void *cb_arg);
 void mgos_bt_ble_scan(mgos_bt_ble_scan_cb_t cb, void *cb_arg);
+void mgos_bt_ble_scan_device_addr(const esp_bd_addr_t addr,
+                                  mgos_bt_ble_scan_cb_t cb, void *cb_arg);
+void mgos_bt_ble_scan_device_name(const struct mg_str name,
+                                  mgos_bt_ble_scan_cb_t cb, void *cb_arg);
 
 typedef void (*mgos_bt_gattc_open_cb)(int conn_id, bool result, void *arg);
-void mgos_bt_gattc_open(const esp_bd_addr_t addr, int mtu,
-                        mgos_bt_gattc_open_cb cb, void *cb_arg);
+void mgos_bt_gattc_open_addr(const esp_bd_addr_t addr, int mtu,
+                             mgos_bt_gattc_open_cb cb, void *cb_arg);
+void mgos_bt_gattc_open_name(const struct mg_str name, int mtu,
+                             mgos_bt_gattc_open_cb cb, void *cb_arg);
 
 typedef void (*mgos_bt_gattc_list_services_cb_t)(int conn_id, int num_res,
                                                  const esp_gatt_srvc_id_t *res,
