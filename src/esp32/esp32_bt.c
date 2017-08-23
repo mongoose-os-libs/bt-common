@@ -405,6 +405,43 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
                      p->status, p->params.rx_len, p->params.tx_len));
       break;
     }
+    case ESP_GAP_BLE_SET_LOCAL_PRIVACY_COMPLETE_EVT: {
+      const struct ble_local_privacy_cmpl_evt_param *p =
+          &ep->local_privacy_cmpl;
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("SET_LOCAL_PRIVACY_COMPLETE st %d", p->status));
+      break;
+    }
+    case ESP_GAP_BLE_REMOVE_BOND_DEV_COMPLETE_EVT: {
+      const struct ble_remove_bond_dev_cmpl_evt_param *p =
+          &ep->remove_bond_dev_cmpl;
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("REMOVE_BOND_DEV_COMPLETE st %d bda %s", p->status,
+               mgos_bt_addr_to_str(p->bd_addr, buf)));
+      break;
+    }
+    case ESP_GAP_BLE_CLEAR_BOND_DEV_COMPLETE_EVT: {
+      const struct ble_clear_bond_dev_cmpl_evt_param *p =
+          &ep->clear_bond_dev_cmpl;
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("CLEAR_BOND_DEV_COMPLETE st %d", p->status));
+      break;
+    }
+    case ESP_GAP_BLE_GET_BOND_DEV_COMPLETE_EVT: {
+      const struct ble_get_bond_dev_cmpl_evt_param *p = &ep->get_bond_dev_cmpl;
+      enum cs_log_level ll = ll_from_status(p->status);
+      if (p->status != ESP_BT_STATUS_SUCCESS) {
+        LOG(ll, ("GET_BOND_DEV_COMPLETE st %d", p->status));
+      } else {
+        LOG(ll,
+            ("GET_BOND_DEV_COMPLETE st %d dev_num %d peer_addr %s", p->status,
+             p->dev_num, mgos_bt_addr_to_str(p->bond_dev->bd_addr, buf)));
+      }
+      break;
+    }
+    case ESP_GAP_BLE_EVT_MAX: {
+      break;
+    }
   }
 }
 
