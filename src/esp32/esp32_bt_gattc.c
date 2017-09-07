@@ -14,6 +14,7 @@
 #include "bta_api.h"
 #include "esp_bt_defs.h"
 #include "esp_gap_ble_api.h"
+#include "esp_gatt_common_api.h"
 #include "esp_gattc_api.h"
 
 #include "common/cs_dbg.h"
@@ -160,8 +161,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
       }
       if (p->mtu != ce->bc.mtu) {
         LOG(LL_DEBUG, ("Setting MTU to %d", ce->bc.mtu));
-        if (esp_ble_gattc_config_mtu(gattc_if, p->conn_id, ce->bc.mtu) !=
-            ESP_OK) {
+        if (esp_ble_gattc_send_mtu_req(gattc_if, p->conn_id) != ESP_OK) {
           ce->open_cb(ce->conn_id, false, ce->open_cb_arg);
           esp_ble_gattc_close(gattc_if, p->conn_id);
         }
