@@ -87,28 +87,28 @@ void mgos_bt_gattc_list_services(int conn_id,
                                  void *cb_arg);
 
 struct mgos_bt_gattc_list_chars_result {
-  esp_gatt_id_t char_id;
+  esp_bt_uuid_t char_id;
   esp_gatt_char_prop_t char_prop;
 };
 
 typedef void (*mgos_bt_gattc_list_chars_cb_t)(
-    int conn_id, const esp_gatt_srvc_id_t *svc_id, int num_res,
+    int conn_id, const esp_bt_uuid_t *svc_id, int num_res,
     const struct mgos_bt_gattc_list_chars_result *res, void *arg);
-void mgos_bt_gattc_list_chars(int conn_id, const esp_gatt_srvc_id_t *svc_id,
+void mgos_bt_gattc_list_chars(int conn_id, const esp_bt_uuid_t *svc_id,
                               mgos_bt_gattc_list_chars_cb_t cb, void *cb_arg);
 
 typedef void (*mgos_bt_gattc_read_char_cb_t)(int conn_id, bool success,
                                              const struct mg_str value,
                                              void *arg);
-void mgos_bt_gattc_read_char(int conn_id, const esp_gatt_srvc_id_t *svc_id,
-                             const esp_gatt_id_t *char_id,
+void mgos_bt_gattc_read_char(int conn_id, const esp_bt_uuid_t *svc_id,
+                             const esp_bt_uuid_t *char_id,
                              esp_gatt_auth_req_t auth_req,
                              mgos_bt_gattc_read_char_cb_t cb, void *cb_arg);
 
 typedef void (*mgos_bt_gattc_write_char_cb_t)(int conn_id, bool success,
                                               void *arg);
-void mgos_bt_gattc_write_char(int conn_id, const esp_gatt_srvc_id_t *svc_id,
-                              const esp_gatt_id_t *char_id,
+void mgos_bt_gattc_write_char(int conn_id, const esp_bt_uuid_t *svc_id,
+                              const esp_bt_uuid_t *char_id,
                               bool response_required,
                               esp_gatt_auth_req_t auth_req,
                               const struct mg_str value,

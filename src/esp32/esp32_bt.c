@@ -439,6 +439,21 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
       }
       break;
     }
+    case ESP_GAP_BLE_READ_RSSI_COMPLETE_EVT: {
+      const struct ble_read_rssi_cmpl_evt_param *p = &ep->read_rssi_cmpl;
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("READ_RSSI_COMPLETE st %d rssi %d ra %s", p->status, p->rssi,
+               mgos_bt_addr_to_str(p->remote_addr, buf)));
+      break;
+    }
+    case ESP_GAP_BLE_ADD_WHITELIST_COMPLETE_EVT: {
+      const struct ble_add_whitelist_cmpl_evt_param *p =
+          &ep->add_whitelist_cmpl;
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll,
+          ("ADD_WHITELIST_COMPLETE st %d op %d", p->status, p->wl_opration));
+      break;
+    }
     case ESP_GAP_BLE_EVT_MAX: {
       break;
     }
@@ -535,7 +550,7 @@ static void mgos_bt_net_ev(enum mgos_net_event ev,
   mgos_sys_config_set_bt_enable(false);
   char *msg = NULL;
   if (save_cfg(&mgos_sys_config, &msg)) {
-    esp_bt_controller_disable(ESP_BT_MODE_BTDM);
+    esp_bt_controller_disable();
   }
   (void) arg;
 }
