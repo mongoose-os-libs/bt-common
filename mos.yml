@@ -7,6 +7,8 @@ platforms: [ esp32 ]
 
 sources:
   - src/${arch}
+includes:
+  - include/${arch}
 
 config_schema:
   - ["bt", "o", {title: "Bluetooth settings"}]
