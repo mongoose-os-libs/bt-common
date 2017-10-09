@@ -20,7 +20,7 @@
 #include "common/cs_dbg.h"
 #include "common/queue.h"
 
-#include "mgos_hal.h"
+#include "mgos_system.h"
 
 #define INVALID_ESP_CONNECTION_ID ((uint16_t) 0xffff)
 
