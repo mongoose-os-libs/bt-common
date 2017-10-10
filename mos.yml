@@ -21,6 +21,6 @@ tags:
   - bt
   - bluetooth
   - c
-  - hw
+  - net
 
 manifest_version: 2017-09-29
