@@ -205,7 +205,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT: {
       const struct ble_adv_data_cmpl_evt_param *p = &ep->adv_data_cmpl;
       LOG(LL_DEBUG, ("ADV_DATA_SET_COMPLETE st %d", p->status));
-      if (get_cfg()->bt.adv_enable && !is_scanning()) {
+      if (mgos_sys_config_get_bt_adv_enable() && !is_scanning()) {
         start_advertising();
       }
       break;
@@ -469,7 +469,8 @@ static void scan_done_mgos_cb(void *arg) {
 static void scan_ctx_done(struct scan_ctx *sctx, int status) {
   if (status < 0) sctx->num_res = status;
   LOG(LL_INFO, ("BLE scan done, %d", sctx->num_res));
-  if (get_cfg()->bt.adv_enable && !is_advertising()) { /* Resume advertising */
+  if (mgos_sys_config_get_bt_adv_enable() &&
+      !is_advertising()) { /* Resume advertising */
     start_advertising();
   }
   mgos_invoke_cb(scan_done_mgos_cb, sctx, false /* from_isr */);
@@ -531,9 +532,9 @@ static void mgos_bt_net_ev(enum mgos_net_event ev,
                            void *arg) {
   if (ev != MGOS_NET_EV_IP_ACQUIRED) return;
   LOG(LL_INFO, ("Network is up, disabling Bluetooth"));
-  get_cfg()->bt.enable = false;
+  mgos_sys_config_set_bt_enable(false);
   char *msg = NULL;
-  if (save_cfg(get_cfg(), &msg)) {
+  if (save_cfg(&mgos_sys_config, &msg)) {
     esp_bt_controller_disable(ESP_BT_MODE_BTDM);
   }
   (void) arg;
@@ -541,14 +542,12 @@ static void mgos_bt_net_ev(enum mgos_net_event ev,
 
 bool mgos_bt_common_init(void) {
   bool ret = false;
-  const struct sys_config *cfg = get_cfg();
-  const struct sys_config_bt *btcfg = &cfg->bt;
-  if (!btcfg->enable) {
+  if (!mgos_sys_config_get_bt_enable()) {
     LOG(LL_INFO, ("Bluetooth is disabled"));
     return true;
   }
 
-  if (!btcfg->keep_enabled) {
+  if (!mgos_sys_config_get_bt_keep_enabled()) {
     mgos_net_add_event_handler(mgos_bt_net_ev, NULL);
   }
 

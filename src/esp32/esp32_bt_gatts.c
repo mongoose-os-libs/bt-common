@@ -282,7 +282,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       conn_params.timeout = 400;  /* timeout = 400*10ms = 4000ms */
       esp_ble_gap_update_conn_params(&conn_params);
       /* Resume advertising */
-      if (get_cfg()->bt.adv_enable && !is_scanning()) {
+      if (mgos_sys_config_get_bt_adv_enable() && !is_scanning()) {
         start_advertising();
       }
       struct esp32_gatts_connection_entry *ce =
@@ -321,7 +321,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
         SLIST_REMOVE(&s_conns, ce, esp32_gatts_connection_entry, next);
         free(ce);
       }
-      if (get_cfg()->bt.adv_enable && !is_scanning()) {
+      if (mgos_sys_config_get_bt_adv_enable() && !is_scanning()) {
         start_advertising();
       }
       break;
@@ -410,9 +410,8 @@ bool mgos_bt_gatts_register_service(const esp_gatts_attr_db_t *svc_descr,
 }
 
 bool esp32_bt_gatts_init(void) {
-  const struct sys_config *cfg = get_cfg();
-  s_dev_name = cfg->bt.dev_name;
-  if (s_dev_name == NULL) s_dev_name = cfg->device.id;
+  s_dev_name = mgos_sys_config_get_bt_dev_name();
+  if (s_dev_name == NULL) s_dev_name = mgos_sys_config_get_device_id();
   if (s_dev_name == NULL) {
     LOG(LL_ERROR, ("bt.dev_name or device.id must be set"));
     return false;
