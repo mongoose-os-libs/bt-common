@@ -20,6 +20,7 @@
 #include "common/cs_dbg.h"
 #include "common/queue.h"
 
+#include "mgos_hal.h"
 #include "mgos_sys_config.h"
 
 struct esp32_bt_service_entry {
@@ -42,6 +43,13 @@ struct esp32_gatts_connection_entry {
   struct esp32_bt_connection bc;
   SLIST_HEAD(sessions, esp32_gatts_session_entry) sessions;
   SLIST_ENTRY(esp32_gatts_connection_entry) next;
+};
+
+struct esp32_gatts_ev_info {
+  struct esp32_bt_service_entry *se;
+  struct esp32_gatts_session_entry *sse;
+  esp_gatts_cb_event_t ev;
+  esp_ble_gatts_cb_param_t ep;
 };
 
 static SLIST_HEAD(s_svcs, esp32_bt_service_entry) s_svcs =
@@ -122,6 +130,77 @@ static struct esp32_gatts_connection_entry *find_connection(
   return NULL;
 }
 
+/* Executed on the main task. */
+static void gatts_ev_mgos(void *arg) {
+  struct esp32_gatts_ev_info *ei = (struct esp32_gatts_ev_info *) arg;
+  struct esp32_bt_session *bs = (ei->sse != NULL ? &ei->sse->bs : NULL);
+  bool ret = ei->se->cb(bs, ei->ev, &ei->ep);
+  switch (ei->ev) {
+    case ESP_GATTS_CREAT_ATTR_TAB_EVT: {
+      free(ei->ep.add_attr_tab.handles);
+      break;
+    }
+    case ESP_GATTS_READ_EVT: {
+      if (!ret) {
+        esp_ble_gatts_send_response(
+            ei->sse->bs.bc->gatt_if, ei->sse->bs.bc->conn_id,
+            ei->ep.read.trans_id, ESP_GATT_READ_NOT_PERMIT, NULL);
+      } else {
+        /* Response was sent by the callback. */
+      }
+      break;
+    }
+    case ESP_GATTS_WRITE_EVT: {
+      esp_ble_gatts_send_response(
+          ei->sse->bs.bc->gatt_if, ei->sse->bs.bc->conn_id,
+          ei->ep.read.trans_id, (ret ? ESP_GATT_OK : ESP_GATT_WRITE_NOT_PERMIT),
+          NULL);
+      free(ei->ep.write.value);
+      break;
+    }
+    case ESP_GATTS_DISCONNECT_EVT: {
+      free(ei->sse);
+      break;
+    }
+    default:
+      break;
+  }
+  free(ei);
+};
+
+static void run_on_mgos_task(struct esp32_gatts_session_entry *sse,
+                             struct esp32_bt_service_entry *se,
+                             esp_gatts_cb_event_t ev,
+                             esp_ble_gatts_cb_param_t *ep) {
+  struct esp32_gatts_ev_info *ei =
+      (struct esp32_gatts_ev_info *) calloc(1, sizeof(*ei));
+  ei->sse = sse;
+  ei->se = se;
+  ei->ev = ev;
+  memcpy(&ei->ep, ep, sizeof(ei->ep));
+  switch (ei->ev) {
+    case ESP_GATTS_CREAT_ATTR_TAB_EVT: {
+      /* Make a copy of handles */
+      size_t len =
+          ep->add_attr_tab.num_handle * sizeof(*ep->add_attr_tab.handles);
+      uint16_t *handles_copy = (uint16_t *) malloc(len);
+      memcpy(handles_copy, ep->add_attr_tab.handles, len);
+      ei->ep.add_attr_tab.handles = handles_copy;
+      break;
+    }
+    case ESP_GATTS_WRITE_EVT: {
+      /* Make a copy of the value */
+      uint8_t *value_copy = (uint8_t *) malloc(ep->write.len);
+      memcpy(value_copy, ep->write.value, ep->write.len);
+      ei->ep.write.value = value_copy;
+      break;
+    }
+    default:
+      break;
+  }
+  mgos_invoke_cb(gatts_ev_mgos, ei, false /* from_isr */);
+}
+
 static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
                               esp_ble_gatts_cb_param_t *ep) {
   esp_err_t r;
@@ -147,7 +226,6 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
                      p->handle, p->offset, (p->is_long ? " long" : ""),
                      (p->need_rsp ? " need_rsp" : "")));
       if (!p->need_rsp) break;
-      bool ret = false;
       struct esp32_gatts_connection_entry *ce =
           find_connection(gatts_if, p->conn_id);
       if (ce != NULL) {
@@ -156,15 +234,9 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
         struct esp32_gatts_session_entry *sse;
         SLIST_FOREACH(sse, &ce->sessions, next) {
           if (sse->se == se) {
-            ret = sse->se->cb(&sse->bs, ev, ep);
+            run_on_mgos_task(sse, sse->se, ev, ep);
           }
         }
-      }
-      if (!ret) {
-        esp_ble_gatts_send_response(gatts_if, p->conn_id, p->trans_id,
-                                    ESP_GATT_READ_NOT_PERMIT, NULL);
-      } else {
-        /* Response was sent by the callback. */
       }
       break;
     }
@@ -175,7 +247,6 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
                      p->handle, p->offset, p->len, (p->is_prep ? " prep" : ""),
                      (p->need_rsp ? " need_rsp" : "")));
       if (!p->need_rsp) break;
-      bool ret = false;
       struct esp32_gatts_connection_entry *ce =
           find_connection(gatts_if, p->conn_id);
       if (ce != NULL) {
@@ -184,13 +255,10 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
         struct esp32_gatts_session_entry *sse;
         SLIST_FOREACH(sse, &ce->sessions, next) {
           if (sse->se == se) {
-            ret = sse->se->cb(&sse->bs, ev, ep);
+            run_on_mgos_task(sse, sse->se, ev, ep);
           }
         }
       }
-      esp_ble_gatts_send_response(
-          gatts_if, p->conn_id, p->trans_id,
-          (ret ? ESP_GATT_OK : ESP_GATT_WRITE_NOT_PERMIT), NULL);
       break;
     }
     case ESP_GATTS_EXEC_WRITE_EVT: {
@@ -299,7 +367,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
         sse->se = se;
         sse->bs.bc = &ce->bc;
         SLIST_INSERT_HEAD(&ce->sessions, sse, next);
-        se->cb(&sse->bs, ev, ep);
+        run_on_mgos_task(sse, sse->se, ev, ep);
       }
       SLIST_INSERT_HEAD(&s_conns, ce, next);
       break;
@@ -315,8 +383,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       if (ce != NULL) {
         struct esp32_gatts_session_entry *sse, *sset;
         SLIST_FOREACH_SAFE(sse, &ce->sessions, next, sset) {
-          sse->se->cb(&sse->bs, ev, ep);
-          free(sse);
+          run_on_mgos_task(sse, sse->se, ev, ep);
         }
         SLIST_REMOVE(&s_conns, ce, esp32_gatts_connection_entry, next);
         free(ce);
@@ -377,7 +444,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
           (uint16_t *) calloc(p->num_handle, sizeof(*se->attr_handles));
       memcpy(se->attr_handles, p->handles,
              p->num_handle * sizeof(*se->attr_handles));
-      se->cb(NULL, ev, ep);
+      run_on_mgos_task(NULL, se, ev, ep);
       uint16_t svch = se->attr_handles[0];
       LOG(LL_INFO,
           ("Starting BT service %s", mgos_bt_uuid_to_str(&p->svc_uuid, buf)));
