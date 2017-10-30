@@ -151,10 +151,12 @@ static void gatts_ev_mgos(void *arg) {
       break;
     }
     case ESP_GATTS_WRITE_EVT: {
-      esp_ble_gatts_send_response(
-          ei->sse->bs.bc->gatt_if, ei->sse->bs.bc->conn_id,
-          ei->ep.read.trans_id, (ret ? ESP_GATT_OK : ESP_GATT_WRITE_NOT_PERMIT),
-          NULL);
+      if (ei->ep.write.need_rsp) {
+        esp_ble_gatts_send_response(
+            ei->sse->bs.bc->gatt_if, ei->sse->bs.bc->conn_id,
+            ei->ep.write.trans_id,
+            (ret ? ESP_GATT_OK : ESP_GATT_WRITE_NOT_PERMIT), NULL);
+      }
       free(ei->ep.write.value);
       break;
     }
