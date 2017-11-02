@@ -15,6 +15,7 @@
 #include "esp_bt_defs.h"
 #include "esp_bt_main.h"
 #include "esp_gap_ble_api.h"
+#include "esp_gatt_common_api.h"
 
 #include "common/mg_str.h"
 
@@ -589,6 +590,8 @@ bool mgos_bt_common_init(void) {
   }
 
   esp_ble_gap_register_callback(esp32_bt_gap_ev);
+
+  esp_ble_gatt_set_local_mtu(ESP_GATT_MAX_MTU_SIZE);
 
   if (!esp32_bt_gattc_init()) {
     LOG(LL_ERROR, ("GATTC init failed"));

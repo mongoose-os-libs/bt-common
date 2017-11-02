@@ -171,7 +171,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
         remove_connection(ce);
         break;
       }
-      if (p->mtu == ce->bc.mtu) ce->mtu_set = true;
+      ce->bc.mtu = p->mtu;
       /*
        * Perform automatic service discovery.
        * This is needed for UUID lookups to work.
@@ -272,19 +272,9 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
       if (p->status == ESP_GATT_OK) ce->services_listed = true;
       if (ce->open_ctx != NULL) {
         if (p->status == ESP_GATT_OK) {
-          if (!ce->mtu_set) {
-            LOG(LL_DEBUG, ("Setting MTU to %d", ce->bc.mtu));
-            /*
-             * esp_ble_gatt_set_local_mtu is global! wtf?
-             * https://github.com/espressif/esp-idf/issues/1135
-             */
-            if (esp_ble_gatt_set_local_mtu(ce->bc.mtu) != ESP_OK ||
-                esp_ble_gattc_send_mtu_req(gattc_if, p->conn_id) != ESP_OK) {
-              open_done(ce, false);
-              esp_ble_gattc_close(gattc_if, p->conn_id);
-            }
-          } else {
-            open_done(ce, true);
+          if (esp_ble_gattc_send_mtu_req(gattc_if, p->conn_id) != ESP_OK) {
+            open_done(ce, false);
+            esp_ble_gattc_close(gattc_if, p->conn_id);
           }
         } else {
           open_done(ce, false);
@@ -488,7 +478,7 @@ static void gattc_open_addr_scan_cb(int num_res,
 }
 
 static void mgos_bt_gattc_open_addr_internal(const esp_bd_addr_t addr,
-                                             bool need_scan, int mtu,
+                                             bool need_scan,
                                              mgos_bt_gattc_open_cb cb,
                                              void *cb_arg) {
   char buf[BT_ADDR_STR_LEN];
@@ -516,7 +506,7 @@ static void mgos_bt_gattc_open_addr_internal(const esp_bd_addr_t addr,
   ce->conn_id = s_conn_id++;
   ce->bc.conn_id = INVALID_ESP_CONNECTION_ID;
   ce->bc.gatt_if = s_gattc_if;
-  ce->bc.mtu = (mtu > 0 ? mtu : ESP_GATT_DEF_BLE_MTU_SIZE);
+  ce->bc.mtu = ESP_GATT_DEF_BLE_MTU_SIZE;
   memcpy(ce->bc.peer_addr, addr, ESP_BD_ADDR_LEN);
   struct esp32_gattc_open_ctx *octx =
       (struct esp32_gattc_open_ctx *) calloc(1, sizeof(*ce->open_ctx));
@@ -537,15 +527,14 @@ static void mgos_bt_gattc_open_addr_internal(const esp_bd_addr_t addr,
   }
 }
 
-void mgos_bt_gattc_open_addr(const esp_bd_addr_t addr, int mtu,
-                             mgos_bt_gattc_open_cb cb, void *cb_arg) {
-  return mgos_bt_gattc_open_addr_internal(addr, false /* need_scan */, mtu, cb,
+void mgos_bt_gattc_open_addr(const esp_bd_addr_t addr, mgos_bt_gattc_open_cb cb,
+                             void *cb_arg) {
+  return mgos_bt_gattc_open_addr_internal(addr, false /* need_scan */, cb,
                                           cb_arg);
 }
 
 struct open_name_ctx {
   struct mg_str name;
-  int mtu;
   mgos_bt_gattc_open_cb cb;
   void *cb_arg;
 };
@@ -559,8 +548,8 @@ static void gattc_open_name_scan_cb(int num_res,
     LOG(LL_INFO,
         ("%.*s found, addr %s, RSSI %d", (int) octx->name.len, octx->name.p,
          mgos_bt_addr_to_str(res->addr, buf), res->rssi));
-    mgos_bt_gattc_open_addr_internal(res->addr, false /* need_scan */,
-                                     octx->mtu, octx->cb, octx->cb_arg);
+    mgos_bt_gattc_open_addr_internal(res->addr, false /* need_scan */, octx->cb,
+                                     octx->cb_arg);
   } else {
     LOG(LL_ERROR,
         ("%.*s not found (%d)", (int) octx->name.len, octx->name.p, num_res));
@@ -570,12 +559,11 @@ static void gattc_open_name_scan_cb(int num_res,
   free(octx);
 }
 
-void mgos_bt_gattc_open_name(const struct mg_str name, int mtu,
-                             mgos_bt_gattc_open_cb cb, void *cb_arg) {
+void mgos_bt_gattc_open_name(const struct mg_str name, mgos_bt_gattc_open_cb cb,
+                             void *cb_arg) {
   struct open_name_ctx *octx =
       (struct open_name_ctx *) calloc(1, sizeof(*octx));
   octx->name = mg_strdup(name);
-  octx->mtu = mtu;
   octx->cb = cb;
   octx->cb_arg = cb_arg;
   LOG(LL_INFO, ("Looking for %.*s", (int) name.len, name.p));
