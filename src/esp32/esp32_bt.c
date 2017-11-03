@@ -396,7 +396,10 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
     case ESP_GAP_BLE_UPDATE_CONN_PARAMS_EVT: {
       const struct ble_update_conn_params_evt_param *p =
           &ep->update_conn_params;
-      LOG(LL_DEBUG, ("UPDATE_CONN_PARAMS st %d", p->status));
+      LOG(LL_DEBUG, ("UPDATE_CONN_PARAMS st %d addr %s int %u-%u lat %u "
+                     "conn_int %u tout %u",
+                     p->status, mgos_bt_addr_to_str(p->bda, buf), p->min_int,
+                     p->max_int, p->latency, p->conn_int, p->timeout));
       break;
     }
     case ESP_GAP_BLE_SET_PKT_LENGTH_COMPLETE_EVT: {
