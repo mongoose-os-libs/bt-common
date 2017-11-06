@@ -3,8 +3,7 @@
  * All rights reserved
  */
 
-#include "esp32_bt.h"
-#include "esp32_bt_internal.h"
+#include "esp32_bt_gatts.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -23,6 +22,8 @@
 
 #include "mgos_hal.h"
 #include "mgos_sys_config.h"
+
+#include "esp32_bt_internal.h"
 
 #ifndef MGOS_BT_GATTS_MAX_PREPARED_WRITE_LEN
 #define MGOS_BT_GATTS_MAX_PREPARED_WRITE_LEN 4096
