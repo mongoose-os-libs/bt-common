@@ -455,10 +455,8 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
     }
     case ESP_GATTS_CONNECT_EVT: {
       const struct gatts_connect_evt_param *p = &ep->connect;
-      LOG(LL_INFO, ("CONNECT cid %d addr %s%s", p->conn_id,
-                    mgos_bt_addr_to_str(p->remote_bda, buf),
-                    (p->is_connected ? " connected" : "")));
-      if (!p->is_connected) break;
+      LOG(LL_INFO, ("CONNECT cid %d addr %s", p->conn_id,
+                    mgos_bt_addr_to_str(p->remote_bda, buf)));
       esp_ble_conn_update_params_t conn_params = {0};
       memcpy(conn_params.bda, p->remote_bda, ESP_BD_ADDR_LEN);
       conn_params.latency = 0;
@@ -491,9 +489,8 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
     }
     case ESP_GATTS_DISCONNECT_EVT: {
       const struct gatts_disconnect_evt_param *p = &ep->disconnect;
-      LOG(LL_INFO, ("DISCONNECT cid %d addr %s%s", p->conn_id,
-                    mgos_bt_addr_to_str(p->remote_bda, buf),
-                    (p->is_connected ? " connected" : "")));
+      LOG(LL_INFO, ("DISCONNECT cid %d addr %s", p->conn_id,
+                    mgos_bt_addr_to_str(p->remote_bda, buf)));
 
       struct esp32_gatts_connection_entry *ce =
           find_connection(gatts_if, p->conn_id);

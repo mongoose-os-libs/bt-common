@@ -534,16 +534,14 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
     }
     case ESP_GATTC_CONNECT_EVT: {
       const struct gattc_connect_evt_param *p = &ep->connect;
-      enum cs_log_level ll = ll_from_status(p->status);
-      LOG(ll, ("CONNECT st %d cid %u addr %s", p->status, p->conn_id,
-               mgos_bt_addr_to_str(p->remote_bda, buf)));
+      LOG(LL_DEBUG, ("CONNECT cid %u addr %s", p->conn_id,
+                     mgos_bt_addr_to_str(p->remote_bda, buf)));
       break;
     }
     case ESP_GATTC_DISCONNECT_EVT: {
       const struct gattc_disconnect_evt_param *p = &ep->disconnect;
-      enum cs_log_level ll = ll_from_status(p->status);
-      LOG(ll, ("DISCONNECT st %d cid %u addr %s", p->status, p->conn_id,
-               mgos_bt_addr_to_str(p->remote_bda, buf)));
+      LOG(LL_DEBUG, ("DISCONNECT cid %u addr %s", p->conn_id,
+                     mgos_bt_addr_to_str(p->remote_bda, buf)));
       break;
     }
     case ESP_GATTC_READ_MUTIPLE_EVT: {
