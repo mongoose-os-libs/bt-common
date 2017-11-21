@@ -257,6 +257,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
           for (int i = 0; i < sctx->num_res; i++) {
             if (mgos_bt_addr_cmp(sctx->res[i].addr, p->bda) == 0) {
               r = &sctx->res[i];
+              free((void *) r->adv_data.p);
               break;
             }
           }
@@ -265,6 +266,8 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
             r = &sctx->res[sctx->num_res++];
           }
           memset(r, 0, sizeof(*r));
+          r->adv_data = mg_strdup(
+              mg_mk_str_n((const char *) p->ble_adv, p->adv_data_len));
           memcpy(&r->addr, &p->bda, sizeof(r->addr));
           memcpy(r->name, name, name_len);
           r->rssi = p->rssi;
@@ -281,6 +284,10 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
               tsctx->num_res = 1;
               tsctx->res = calloc(1, sizeof(*r));
               memcpy(tsctx->res, r, sizeof(*r));
+              /* Avoid double-free (name -> addr resolver doesn't need adv data
+               * anyway). */
+              tsctx->res->adv_data.p = NULL;
+              tsctx->res->adv_data.len = 0;
               SLIST_REMOVE(&sctx->cbs, cbi, scan_cb_info, next);
               SLIST_INSERT_HEAD(&tsctx->cbs, cbi, next);
               scan_ctx_done(tsctx, 0);
@@ -480,6 +487,9 @@ static void scan_done_mgos_cb(void *arg) {
     cbi->cb(num_res, (num_res > 0 ? sctx->res : NULL), cbi->cb_arg);
     free((void *) cbi->target_name.p);
     free(cbi);
+  }
+  for (int i = 0; i < sctx->num_res; i++) {
+    free((void *) sctx->res[i].adv_data.p);
   }
   free(sctx->res);
   free(sctx);

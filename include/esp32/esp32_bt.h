@@ -47,6 +47,7 @@ struct esp32_bt_connection {
 
 struct mgos_bt_ble_scan_result {
   esp_bd_addr_t addr;
+  struct mg_str adv_data;              /* Raw adv data */
   char name[MGOS_BT_DEV_NAME_LEN + 1]; /* NUL-terminated */
   int rssi;
 };
