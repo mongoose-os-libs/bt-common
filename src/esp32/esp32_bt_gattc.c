@@ -625,7 +625,9 @@ static void mgos_bt_gattc_open_addr_internal(const esp_bd_addr_t addr,
   if (need_scan) {
     LOG(LL_INFO,
         ("Looking for %s", mgos_bt_addr_to_str(ce->bc.peer_addr, buf)));
-    mgos_bt_ble_scan_device_addr(ce->bc.peer_addr, gattc_open_addr_scan_cb, ce);
+    struct mgos_bt_ble_scan_opts opts = {0}; /* Use defaults */
+    memcpy(opts.addr, ce->bc.peer_addr, sizeof(opts.addr));
+    mgos_bt_ble_scan(&opts, gattc_open_addr_scan_cb, ce);
   } else {
     gattc_open_do_open(ce);
   }
@@ -671,7 +673,10 @@ void mgos_bt_gattc_open_name(const struct mg_str name, mgos_bt_gattc_open_cb cb,
   octx->cb = cb;
   octx->cb_arg = cb_arg;
   LOG(LL_INFO, ("Looking for %.*s", (int) name.len, name.p));
-  mgos_bt_ble_scan_device_name(name, gattc_open_name_scan_cb, octx);
+  struct mgos_bt_ble_scan_opts opts = {
+      .name = name,
+  };
+  mgos_bt_ble_scan(&opts, gattc_open_name_scan_cb, octx);
 }
 
 bool mgos_bt_gattc_get_conn_info(int conn_id, struct esp32_bt_connection *bc) {

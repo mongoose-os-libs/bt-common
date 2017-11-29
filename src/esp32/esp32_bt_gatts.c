@@ -71,7 +71,6 @@ static SLIST_HEAD(s_svcs, esp32_bt_service_entry) s_svcs =
 static SLIST_HEAD(s_conns, esp32_gatts_connection_entry) s_conns =
     SLIST_HEAD_INITIALIZER(s_conns);
 
-static const char *s_dev_name = NULL;
 static bool s_gatts_registered = false;
 static esp_gatt_if_t s_gatts_if;
 
@@ -83,22 +82,6 @@ const uint8_t char_prop_read_write =
 const uint8_t char_prop_read_notify =
     (ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_NOTIFY);
 const uint8_t char_prop_write = (ESP_GATT_CHAR_PROP_BIT_WRITE);
-
-static esp_ble_adv_data_t mos_rpc_adv_data = {
-    .set_scan_rsp = false,
-    .include_name = true,
-    .include_txpower = true,
-    .min_interval = 0x100, /* 0x100 * 0.625 = 100 ms */
-    .max_interval = 0x200, /* 0x200 * 0.625 = 200 ms */
-    .appearance = 0x00,
-    .manufacturer_len = 0,
-    .p_manufacturer_data = NULL,
-    .service_data_len = 0,
-    .p_service_data = NULL,
-    .service_uuid_len = 0,
-    .p_service_uuid = NULL,
-    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
-};
 
 static void esp32_bt_register_services(void) {
   struct esp32_bt_service_entry *se;
@@ -286,7 +269,6 @@ static void run_on_mgos_task(esp_gatt_if_t gatts_if,
 
 static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
                               esp_ble_gatts_cb_param_t *ep) {
-  esp_err_t r;
   char buf[BT_UUID_STR_LEN];
   switch (ev) {
     case ESP_GATTS_REG_EVT: {
@@ -294,9 +276,6 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll, ("REG if %d st %d app %d", gatts_if, p->status, p->app_id));
       if (p->status != ESP_GATT_OK) break;
-      esp_ble_gap_set_device_name(s_dev_name);
-      r = esp_ble_gap_config_adv_data(&mos_rpc_adv_data);
-      LOG(LL_DEBUG, ("esp_ble_gap_config_adv_data %d", r));
       s_gatts_if = gatts_if;
       s_gatts_registered = true;
       esp32_bt_register_services();
@@ -598,13 +577,6 @@ bool mgos_bt_gatts_register_service(const esp_gatts_attr_db_t *svc_descr,
 }
 
 bool esp32_bt_gatts_init(void) {
-  s_dev_name = mgos_sys_config_get_bt_dev_name();
-  if (s_dev_name == NULL) s_dev_name = mgos_sys_config_get_device_id();
-  if (s_dev_name == NULL) {
-    LOG(LL_ERROR, ("bt.dev_name or device.id must be set"));
-    return false;
-  }
-  LOG(LL_INFO, ("BT device name %s", s_dev_name));
   return (esp_ble_gatts_register_callback(esp32_bt_gatts_ev) == ESP_OK &&
           esp_ble_gatts_app_register(0) == ESP_OK);
 }

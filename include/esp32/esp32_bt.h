@@ -45,20 +45,33 @@ struct esp32_bt_connection {
   uint16_t mtu;
 };
 
+/* Scan each channel for 50 ms, change channel every 100 ms; for 5 seconds */
+#define MGOS_BT_BLE_DEFAULT_SCAN_WINDOW_MS 50
+#define MGOS_BT_BLE_DEFAULT_SCAN_INTERVAL_MS 100
+#define MGOS_BT_BLE_DEFAULT_SCAN_DURATION_MS 5000
+struct mgos_bt_ble_scan_opts {
+  bool active;
+  int window_ms;
+  int interval_ms;
+  int duration_ms;
+  esp_bd_addr_t addr;
+  struct mg_str name;
+};
 struct mgos_bt_ble_scan_result {
   esp_bd_addr_t addr;
-  struct mg_str adv_data;              /* Raw adv data */
+  struct mg_str adv_data; /* Raw adv data */
+  struct mg_str scan_rsp; /* Raw scan response (for active scans) */
   char name[MGOS_BT_DEV_NAME_LEN + 1]; /* NUL-terminated */
   int rssi;
 };
 typedef void (*mgos_bt_ble_scan_cb_t)(int num_res,
                                       const struct mgos_bt_ble_scan_result *res,
                                       void *arg);
-void mgos_bt_ble_scan(mgos_bt_ble_scan_cb_t cb, void *cb_arg);
-void mgos_bt_ble_scan_device_addr(const esp_bd_addr_t addr,
-                                  mgos_bt_ble_scan_cb_t cb, void *cb_arg);
-void mgos_bt_ble_scan_device_name(const struct mg_str name,
-                                  mgos_bt_ble_scan_cb_t cb, void *cb_arg);
+void mgos_bt_ble_scan(const struct mgos_bt_ble_scan_opts *opts,
+                      mgos_bt_ble_scan_cb_t cb, void *cb_arg);
+
+#define MGOS_BT_BLE_MAX_SCAN_RSP_DATA_LEN 31
+void mgos_bt_ble_set_scan_rsp_data(const struct mg_str scan_rsp_data);
 
 #ifdef __cplusplus
 }

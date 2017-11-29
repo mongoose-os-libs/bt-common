@@ -23,6 +23,7 @@ bool is_advertising(void);
 bool start_advertising(void);
 
 bool esp32_bt_init(void);
+bool esp32_bt_gap_init(void);
 bool esp32_bt_gatts_init(void);
 
 #ifdef __cplusplus
