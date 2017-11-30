@@ -551,6 +551,13 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
                p->conn_id, p->handle, p->value_len));
       break;
     }
+    case ESP_GATTC_QUEUE_FULL_EVT: {
+      const struct gattc_queue_full_evt_param *p = &ep->queue_full;
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("QUEUE_FULL st %d cid %u is_full %d", p->status, p->conn_id,
+               p->is_full));
+      break;
+    }
   }
 }
 
