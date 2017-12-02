@@ -157,6 +157,8 @@ static void mgos_bt_net_ev(enum mgos_net_event ev,
   char *msg = NULL;
   if (save_cfg(&mgos_sys_config, &msg)) {
     esp_bt_controller_disable();
+    esp_bt_controller_deinit();
+    esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
   }
   (void) arg;
 }
@@ -165,12 +167,11 @@ bool mgos_bt_common_init(void) {
   bool ret = false;
   if (!mgos_sys_config_get_bt_enable()) {
     LOG(LL_INFO, ("Bluetooth is disabled"));
+    esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
     return true;
   }
 
-  if (!mgos_sys_config_get_bt_keep_enabled()) {
-    mgos_net_add_event_handler(mgos_bt_net_ev, NULL);
-  }
+  esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
 
   esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
   esp_err_t err = esp_bt_controller_init(&bt_cfg);
@@ -178,7 +179,7 @@ bool mgos_bt_common_init(void) {
     LOG(LL_ERROR, ("BT init failed: %d", err));
     goto out;
   }
-  err = esp_bt_controller_enable(ESP_BT_MODE_BTDM);
+  err = esp_bt_controller_enable(ESP_BT_MODE_BLE);
   if (err) {
     LOG(LL_ERROR, ("BT enable failed: %d", err));
     goto out;
@@ -209,6 +210,10 @@ bool mgos_bt_common_init(void) {
   if (!esp32_bt_gatts_init()) {
     LOG(LL_ERROR, ("GATTS init failed"));
     ret = false;
+  }
+
+  if (!mgos_sys_config_get_bt_keep_enabled()) {
+    mgos_net_add_event_handler(mgos_bt_net_ev, NULL);
   }
 
   LOG(LL_INFO, ("Bluetooth init ok"));
