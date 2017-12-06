@@ -447,6 +447,22 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       if (mgos_sys_config_get_bt_adv_enable() && !is_scanning()) {
         start_advertising();
       }
+      switch (mgos_sys_config_get_bt_gatts_min_sec_level()) {
+        case MGOS_BT_GATT_PERM_LEVEL_NONE:
+          break;
+        case MGOS_BT_GATT_PERM_LEVEL_ENCR:
+          LOG(LL_DEBUG, ("%s: Requesting encryption",
+                         mgos_bt_addr_to_str(p->remote_bda, buf)));
+          esp_ble_set_encryption((uint8_t *) p->remote_bda,
+                                 ESP_BLE_SEC_ENCRYPT_NO_MITM);
+          break;
+        case MGOS_BT_GATT_PERM_LEVEL_ENCR_MITM:
+          LOG(LL_DEBUG, ("%s: Requesting encryption + MITM protection",
+                         mgos_bt_addr_to_str(p->remote_bda, buf)));
+          esp_ble_set_encryption((uint8_t *) p->remote_bda,
+                                 ESP_BLE_SEC_ENCRYPT_MITM);
+          break;
+      }
       struct esp32_gatts_connection_entry *ce =
           (struct esp32_gatts_connection_entry *) calloc(1, sizeof(*ce));
       ce->bc.gatt_if = gatts_if;
@@ -568,7 +584,44 @@ bool mgos_bt_gatts_register_service(const esp_gatts_attr_db_t *svc_descr,
   struct esp32_bt_service_entry *se =
       (struct esp32_bt_service_entry *) calloc(1, sizeof(*se));
   if (se == NULL) return false;
-  se->svc_descr = svc_descr;
+  esp_gatts_attr_db_t *svc_descr_copy =
+      (esp_gatts_attr_db_t *) calloc(num_attrs, sizeof(*svc_descr));
+  memcpy(svc_descr_copy, svc_descr, num_attrs * sizeof(*svc_descr_copy));
+  /* Upgrade attr security settings up to the min security level. */
+  enum mgos_bt_gatt_perm_level min_level = (enum mgos_bt_gatt_perm_level)
+      mgos_sys_config_get_bt_gatts_min_sec_level();
+  for (size_t i = 0; i < num_attrs; i++) {
+    esp_attr_desc_t *ad = &svc_descr_copy[i].att_desc;
+    switch (min_level) {
+      case MGOS_BT_GATT_PERM_LEVEL_NONE:
+        break;
+      case MGOS_BT_GATT_PERM_LEVEL_ENCR:
+        if (ad->perm & (ESP_GATT_PERM_READ | ESP_GATT_PERM_READ_ENCRYPTED |
+                        ESP_GATT_PERM_READ_ENC_MITM)) {
+          ad->perm &= ~ESP_GATT_PERM_READ;
+          ad->perm |= ESP_GATT_PERM_READ_ENCRYPTED;
+        }
+        if (ad->perm & (ESP_GATT_PERM_WRITE | ESP_GATT_PERM_WRITE_ENCRYPTED |
+                        ESP_GATT_PERM_WRITE_ENC_MITM)) {
+          ad->perm &= ~ESP_GATT_PERM_WRITE;
+          ad->perm |= ESP_GATT_PERM_WRITE_ENCRYPTED;
+        }
+        break;
+      case MGOS_BT_GATT_PERM_LEVEL_ENCR_MITM:
+        if (ad->perm & (ESP_GATT_PERM_READ | ESP_GATT_PERM_READ_ENCRYPTED |
+                        ESP_GATT_PERM_READ_ENC_MITM)) {
+          ad->perm &= ~(ESP_GATT_PERM_READ | ESP_GATT_PERM_READ_ENCRYPTED);
+          ad->perm |= ESP_GATT_PERM_READ_ENC_MITM;
+        }
+        if (ad->perm & (ESP_GATT_PERM_WRITE | ESP_GATT_PERM_WRITE_ENCRYPTED |
+                        ESP_GATT_PERM_WRITE_ENC_MITM)) {
+          ad->perm &= ~(ESP_GATT_PERM_WRITE | ESP_GATT_PERM_WRITE_ENCRYPTED);
+          ad->perm |= ESP_GATT_PERM_WRITE_ENC_MITM;
+        }
+        break;
+    }
+  }
+  se->svc_descr = svc_descr_copy;
   se->num_attrs = num_attrs;
   se->cb = cb;
   SLIST_INSERT_HEAD(&s_svcs, se, next);

@@ -17,6 +17,7 @@ config_schema:
   - ["bt.adv_enable", "b", true, {title: "Advertise services"}]
   - ["bt.scan_rsp_data_hex", "s", "", {title: "Scan response data, hex-encoded"}]
   - ["bt.keep_enabled", "b", false, {title: "By default, BT will be disabled once WiFi is configured and connects. Set this to true to keep BT enabled."}]
+  - ["bt.gatts_min_sec_level", "i", 0, {title: "0 - no auth required, 1 - encryption reqd, 2 - encryption + MITM reqd"}]
 
 tags:
   - bt

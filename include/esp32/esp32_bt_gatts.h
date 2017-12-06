@@ -15,6 +15,12 @@
 extern "C" {
 #endif
 
+enum mgos_bt_gatt_perm_level {
+  MGOS_BT_GATT_PERM_LEVEL_NONE = 0,
+  MGOS_BT_GATT_PERM_LEVEL_ENCR = 1,
+  MGOS_BT_GATT_PERM_LEVEL_ENCR_MITM = 2,
+};
+
 struct esp32_bt_session {
   struct esp32_bt_connection *bc;
   void *user_data;

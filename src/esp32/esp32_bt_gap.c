@@ -207,19 +207,35 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
       break;
     }
     case ESP_GAP_BLE_AUTH_CMPL_EVT: {
-      LOG(LL_DEBUG, ("AUTH_CMPL"));
+      const esp_ble_auth_cmpl_t *p = &ep->ble_security.auth_cmpl;
+      enum cs_log_level ll = (p->success ? LL_INFO : LL_ERROR);
+      LOG(ll, ("AUTH_CMPL peer %s at %d dt %d success %d (fr %d) kp %d kt %d",
+               mgos_bt_addr_to_str(p->bd_addr, buf), p->addr_type, p->dev_type,
+               p->success, p->fail_reason, p->key_present, p->key_type));
       break;
     }
     case ESP_GAP_BLE_KEY_EVT: {
-      LOG(LL_DEBUG, ("KEY"));
+      const esp_ble_key_t *p = &ep->ble_security.ble_key;
+      LOG(LL_DEBUG, ("KEY peer %s kt %d", mgos_bt_addr_to_str(p->bd_addr, buf),
+                     p->key_type));
       break;
     }
     case ESP_GAP_BLE_SEC_REQ_EVT: {
-      LOG(LL_DEBUG, ("SEC_REQ"));
+      esp_ble_sec_req_t *p = &ep->ble_security.ble_req;
+      LOG(LL_DEBUG, ("SEC_REQ peer %s", mgos_bt_addr_to_str(p->bd_addr, buf)));
+      esp_ble_gap_security_rsp(p->bd_addr, true /* accept */);
       break;
     }
     case ESP_GAP_BLE_PASSKEY_NOTIF_EVT: {
-      LOG(LL_DEBUG, ("PASSKEY_NOTIF"));
+      esp_ble_sec_key_notif_t *p = &ep->ble_security.key_notif;
+      LOG(LL_DEBUG, ("PASSKEY_NOTIF peer %s pk %u",
+                     mgos_bt_addr_to_str(p->bd_addr, buf), p->passkey));
+      /*
+       * TODO(rojer): Provide a callback interface for user to display the code.
+       * For now, hope people read the logs. Yeah.
+       */
+      LOG(LL_ERROR, ("The passkey to pair with %s is %u",
+                     mgos_bt_addr_to_str(p->bd_addr, buf), p->passkey));
       break;
     }
     case ESP_GAP_BLE_PASSKEY_REQ_EVT: {
@@ -484,6 +500,15 @@ bool esp32_bt_gap_init(void) {
       LOG(LL_ERROR, ("Failed to set adv data"));
       return false;
     }
+    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_BOND;
+    esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req,
+                                   sizeof(auth_req));
+    esp_ble_io_cap_t io_cap = ESP_IO_CAP_NONE;
+    esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &io_cap,
+                                   sizeof(uint8_t));
+    uint8_t key_size = 16;
+    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size,
+                                   sizeof(key_size));
   }
   return true;
 }
