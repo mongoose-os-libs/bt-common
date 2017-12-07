@@ -625,6 +625,13 @@ bool mgos_bt_gatts_register_service(const esp_gatts_attr_db_t *svc_descr,
   return true;
 }
 
+int mgos_bt_gatts_get_num_connections(void) {
+  int num = 0;
+  struct esp32_gatts_connection_entry *ce;
+  SLIST_FOREACH(ce, &s_conns, next) num++;
+  return num;
+}
+
 bool esp32_bt_gatts_init(void) {
   return (esp_ble_gatts_register_callback(esp32_bt_gatts_ev) == ESP_OK &&
           esp_ble_gatts_app_register(0) == ESP_OK);

@@ -34,6 +34,8 @@ bool mgos_bt_gatts_register_service(const esp_gatts_attr_db_t *svc_descr,
                                     size_t num_attrs,
                                     mgos_bt_gatts_handler_t cb);
 
+int mgos_bt_gatts_get_num_connections(void);
+
 #ifdef __cplusplus
 }
 #endif

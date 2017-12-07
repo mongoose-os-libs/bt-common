@@ -76,6 +76,8 @@ void mgos_bt_ble_set_scan_rsp_data(const struct mg_str scan_rsp_data);
 bool mgos_bt_gap_get_adv_enable(void);
 bool mgos_bt_gap_set_adv_enable(bool adv_enable);
 
+int mgos_bt_ble_get_num_paired_devices(void);
+
 #ifdef __cplusplus
 }
 #endif

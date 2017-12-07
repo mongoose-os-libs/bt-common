@@ -163,6 +163,10 @@ static void mgos_bt_net_ev(enum mgos_net_event ev,
   (void) arg;
 }
 
+int mgos_bt_ble_get_num_paired_devices(void) {
+  return esp_ble_get_bond_device_num();
+}
+
 bool mgos_bt_common_init(void) {
   bool ret = false;
   if (!mgos_sys_config_get_bt_enable()) {
@@ -219,7 +223,8 @@ bool mgos_bt_common_init(void) {
     mgos_net_add_event_handler(mgos_bt_net_ev, NULL);
   }
 
-  LOG(LL_INFO, ("Bluetooth init ok"));
+  LOG(LL_INFO, ("Bluetooth init ok, %d paired devices",
+                mgos_bt_ble_get_num_paired_devices()));
   ret = true;
 
 out:
