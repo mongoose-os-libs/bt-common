@@ -198,6 +198,7 @@ bool mgos_bt_common_init(void) {
   if (!esp32_bt_gap_init()) {
     LOG(LL_ERROR, ("GAP init failed"));
     ret = false;
+    goto out;
   }
 
   esp_ble_gatt_set_local_mtu(ESP_GATT_MAX_MTU_SIZE);
@@ -205,11 +206,13 @@ bool mgos_bt_common_init(void) {
   if (!esp32_bt_gattc_init()) {
     LOG(LL_ERROR, ("GATTC init failed"));
     ret = false;
+    goto out;
   }
 
   if (!esp32_bt_gatts_init()) {
     LOG(LL_ERROR, ("GATTS init failed"));
     ret = false;
+    goto out;
   }
 
   if (!mgos_sys_config_get_bt_keep_enabled()) {

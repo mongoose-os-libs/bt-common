@@ -443,10 +443,9 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       conn_params.min_int = 0x30; /* min_int = 0x30*1.25ms = 60ms */
       conn_params.timeout = 400;  /* timeout = 400*10ms = 4000ms */
       esp_ble_gap_update_conn_params(&conn_params);
-      /* Resume advertising */
-      if (mgos_sys_config_get_bt_adv_enable() && !is_scanning()) {
-        start_advertising();
-      }
+      /* Connect disables advertising. Resume, if it's enabled. */
+      esp32_bt_set_is_advertising(false);
+      mgos_bt_gap_set_adv_enable(mgos_bt_gap_get_adv_enable());
       switch (mgos_sys_config_get_bt_gatts_min_sec_level()) {
         case MGOS_BT_GATT_PERM_LEVEL_NONE:
           break;
@@ -503,9 +502,6 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
         }
         SLIST_REMOVE(&s_conns, ce, esp32_gatts_connection_entry, next);
         free(ce);
-      }
-      if (mgos_sys_config_get_bt_adv_enable() && !is_scanning()) {
-        start_advertising();
       }
       break;
     }

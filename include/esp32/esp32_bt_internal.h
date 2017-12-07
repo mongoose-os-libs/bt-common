@@ -19,12 +19,11 @@ enum cs_log_level ll_from_status(esp_bt_status_t status);
 bool is_scanning(void);
 bool esp32_bt_gattc_init(void);
 
-bool is_advertising(void);
-bool start_advertising(void);
-
 bool esp32_bt_init(void);
 bool esp32_bt_gap_init(void);
 bool esp32_bt_gatts_init(void);
+
+void esp32_bt_set_is_advertising(bool is_advertising);
 
 #ifdef __cplusplus
 }

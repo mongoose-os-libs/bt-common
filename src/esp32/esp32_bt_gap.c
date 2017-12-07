@@ -37,22 +37,56 @@ struct scan_ctx {
 };
 
 struct scan_ctx *s_scan_ctx = NULL;
-static bool s_advertising = false;
 
-bool is_advertising(void) {
-  return s_advertising;
+static bool s_adv_enable = false, s_advertising = false;
+/* TODO(rojer): Make configurable */
+static esp_ble_adv_data_t s_adv_data = {
+    .set_scan_rsp = false,
+    .include_name = true,
+    .include_txpower = true,
+    .min_interval = 0x100, /* 0x100 * 0.625 = 100 ms */
+    .max_interval = 0x200, /* 0x200 * 0.625 = 200 ms */
+    .appearance = 0x00,
+    .manufacturer_len = 0,
+    .p_manufacturer_data = NULL,
+    .service_data_len = 0,
+    .p_service_data = NULL,
+    .service_uuid_len = 0,
+    .p_service_uuid = NULL,
+    .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
+};
+static esp_ble_adv_params_t s_adv_params = {
+    .adv_int_min = 0x50,  /* 0x100 * 0.625 = 100 ms */
+    .adv_int_max = 0x100, /* 0x200 * 0.625 = 200 ms */
+    .adv_type = ADV_TYPE_IND,
+    .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
+    .channel_map = ADV_CHNL_ALL,
+    .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
+};
+
+static bool start_advertising(void) {
+  if (s_advertising) return true;
+  if (!s_adv_enable || is_scanning()) return false;
+  const char *dev_name = mgos_sys_config_get_bt_dev_name();
+  if (dev_name == NULL) dev_name = mgos_sys_config_get_device_id();
+  if (dev_name == NULL) {
+    LOG(LL_ERROR, ("bt.dev_name or device.id must be set"));
+    return false;
+  }
+  LOG(LL_INFO, ("BT device name %s", dev_name));
+  if (esp_ble_gap_set_device_name(dev_name) != ESP_OK) {
+    return false;
+  }
+  if (esp_ble_gap_config_adv_data(&s_adv_data)) {
+    LOG(LL_ERROR, ("Failed to set adv data"));
+    return false;
+  }
+  return true;
 }
 
-bool start_advertising(void) {
-  esp_ble_adv_params_t adv_params = {
-      .adv_int_min = 0x50,  /* 0x100 * 0.625 = 100 ms */
-      .adv_int_max = 0x100, /* 0x200 * 0.625 = 200 ms */
-      .adv_type = ADV_TYPE_IND,
-      .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
-      .channel_map = ADV_CHNL_ALL,
-      .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
-  };
-  return (esp_ble_gap_start_advertising(&adv_params) == ESP_OK);
+static bool stop_advertising(void) {
+  if (!s_advertising) return true;
+  return (esp_ble_gap_stop_advertising() == ESP_OK);
 }
 
 bool is_scanning(void) {
@@ -69,8 +103,8 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT: {
       const struct ble_adv_data_cmpl_evt_param *p = &ep->adv_data_cmpl;
       LOG(LL_DEBUG, ("ADV_DATA_SET_COMPLETE st %d", p->status));
-      if (mgos_sys_config_get_bt_adv_enable() && !is_scanning()) {
-        start_advertising();
+      if (s_adv_enable && !is_scanning()) {
+        esp_ble_gap_start_advertising(&s_adv_params);
       }
       break;
     }
@@ -93,7 +127,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
        * If we are advertising, suspend to perform a scan.
        */
       if (s_advertising) {
-        if (esp_ble_gap_stop_advertising() != ESP_OK) {
+        if (!stop_advertising()) {
           scan_done(-3);
         }
       } else if (is_scanning()) {
@@ -383,8 +417,7 @@ static void scan_done_mgos_cb(void *arg) {
 static void scan_ctx_done(struct scan_ctx *sctx, int status) {
   if (status < 0) sctx->num_res = status;
   LOG(LL_INFO, ("BLE scan done, %d", sctx->num_res));
-  if (mgos_sys_config_get_bt_adv_enable() &&
-      !is_advertising()) { /* Resume advertising */
+  if (s_adv_enable) { /* Resume advertising */
     start_advertising();
   }
   mgos_invoke_cb(scan_done_mgos_cb, sctx, false /* from_isr */);
@@ -446,6 +479,19 @@ void mgos_bt_ble_set_scan_rsp_data(const struct mg_str scan_rsp_data) {
                                        scan_rsp_data.len);
 }
 
+bool mgos_bt_gap_get_adv_enable(void) {
+  return s_adv_enable;
+}
+
+bool mgos_bt_gap_set_adv_enable(bool adv_enable) {
+  s_adv_enable = adv_enable;
+  return (s_adv_enable ? start_advertising() : stop_advertising());
+}
+
+void esp32_bt_set_is_advertising(bool is_advertising) {
+  s_advertising = is_advertising;
+}
+
 bool esp32_bt_gap_init(void) {
   if (esp_ble_gap_register_callback(esp32_bt_gap_ev) != ESP_OK) {
     return false;
@@ -469,46 +515,15 @@ bool esp32_bt_gap_init(void) {
     }
   }
 
-  if (mgos_sys_config_get_bt_adv_enable()) {
-    const char *dev_name = mgos_sys_config_get_bt_dev_name();
-    if (dev_name == NULL) dev_name = mgos_sys_config_get_device_id();
-    if (dev_name == NULL) {
-      LOG(LL_ERROR, ("bt.dev_name or device.id must be set"));
-      return false;
-    }
-    LOG(LL_INFO, ("BT device name %s", dev_name));
-    if (esp_ble_gap_set_device_name(dev_name) != ESP_OK) {
-      return false;
-    }
-    /* TODO(rojer): Make configurable */
-    esp_ble_adv_data_t adv_data = {
-        .set_scan_rsp = false,
-        .include_name = true,
-        .include_txpower = true,
-        .min_interval = 0x100, /* 0x100 * 0.625 = 100 ms */
-        .max_interval = 0x200, /* 0x200 * 0.625 = 200 ms */
-        .appearance = 0x00,
-        .manufacturer_len = 0,
-        .p_manufacturer_data = NULL,
-        .service_data_len = 0,
-        .p_service_data = NULL,
-        .service_uuid_len = 0,
-        .p_service_uuid = NULL,
-        .flag = (ESP_BLE_ADV_FLAG_GEN_DISC | ESP_BLE_ADV_FLAG_BREDR_NOT_SPT),
-    };
-    if (esp_ble_gap_config_adv_data(&adv_data)) {
-      LOG(LL_ERROR, ("Failed to set adv data"));
-      return false;
-    }
-    esp_ble_auth_req_t auth_req = ESP_LE_AUTH_BOND;
-    esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req,
-                                   sizeof(auth_req));
-    esp_ble_io_cap_t io_cap = ESP_IO_CAP_NONE;
-    esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &io_cap,
-                                   sizeof(uint8_t));
-    uint8_t key_size = 16;
-    esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size,
-                                   sizeof(key_size));
-  }
-  return true;
+  esp_ble_auth_req_t auth_req = ESP_LE_AUTH_BOND;
+  esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req,
+                                 sizeof(auth_req));
+  esp_ble_io_cap_t io_cap = ESP_IO_CAP_NONE;
+  esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &io_cap,
+                                 sizeof(uint8_t));
+  uint8_t key_size = 16;
+  esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size,
+                                 sizeof(key_size));
+
+  return mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
 }

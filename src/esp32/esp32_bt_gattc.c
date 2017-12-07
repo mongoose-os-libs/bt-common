@@ -628,7 +628,6 @@ static void mgos_bt_gattc_open_addr_internal(const esp_bd_addr_t addr,
   STAILQ_INIT(&ce->write_reqs);
   STAILQ_INIT(&ce->subscriptions);
   SLIST_INSERT_HEAD(&s_conns, ce, next);
-  if (is_advertising()) esp_ble_gap_stop_advertising();
   if (need_scan) {
     LOG(LL_INFO,
         ("Looking for %s", mgos_bt_addr_to_str(ce->bc.peer_addr, buf)));
