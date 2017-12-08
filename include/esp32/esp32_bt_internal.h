@@ -22,6 +22,7 @@ bool esp32_bt_gattc_init(void);
 bool esp32_bt_init(void);
 bool esp32_bt_gap_init(void);
 bool esp32_bt_gatts_init(void);
+void esp32_bt_gatts_auth_cmpl(const esp_bd_addr_t addr);
 
 void esp32_bt_set_is_advertising(bool is_advertising);
 

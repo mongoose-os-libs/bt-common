@@ -223,7 +223,8 @@ bool mgos_bt_common_init(void) {
     mgos_net_add_event_handler(mgos_bt_net_ev, NULL);
   }
 
-  LOG(LL_INFO, ("Bluetooth init ok, %d paired devices",
+  LOG(LL_INFO, ("Bluetooth init ok, pairing %s, %d paired devices",
+                (mgos_bt_gap_get_pairing_enable() ? "enabled" : "disabled"),
                 mgos_bt_ble_get_num_paired_devices()));
   ret = true;
 

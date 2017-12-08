@@ -54,6 +54,7 @@ struct esp32_gatts_session_entry {
 
 struct esp32_gatts_connection_entry {
   struct esp32_bt_connection bc;
+  bool need_auth;
   SLIST_HEAD(sessions, esp32_gatts_session_entry) sessions;
   SLIST_ENTRY(esp32_gatts_connection_entry) next;
 };
@@ -267,6 +268,55 @@ static void run_on_mgos_task(esp_gatt_if_t gatts_if,
   mgos_invoke_cb(gatts_ev_mgos, ei, false /* from_isr */);
 }
 
+static bool is_paired(const esp_bd_addr_t addr) {
+  bool result = false;
+  int num = esp_ble_get_bond_device_num();
+  esp_ble_bond_dev_t *list = (esp_ble_bond_dev_t *) calloc(num, sizeof(*list));
+  if (list != NULL && esp_ble_get_bond_device_list(&num, list) == ESP_OK) {
+    for (int i = 0; i < num; i++) {
+      if (mgos_bt_addr_cmp(addr, list[i].bd_addr) == 0) {
+        result = true;
+        break;
+      }
+    }
+  }
+  free(list);
+  return result;
+}
+
+static void create_sessions(struct esp32_gatts_connection_entry *ce) {
+  /* Create a session for each of the currently registered services. */
+  struct esp32_bt_service_entry *se;
+  esp_ble_gatts_cb_param_t ep;
+  ep.connect.conn_id = ce->bc.conn_id;
+  memcpy(ep.connect.remote_bda, ce->bc.peer_addr, ESP_BD_ADDR_LEN);
+  SLIST_FOREACH(se, &s_svcs, next) {
+    struct esp32_gatts_session_entry *sse =
+        (struct esp32_gatts_session_entry *) calloc(1, sizeof(*sse));
+    sse->se = se;
+    sse->bs.bc = &ce->bc;
+    SLIST_INSERT_HEAD(&ce->sessions, sse, next);
+    run_on_mgos_task(ce->bc.gatt_if, sse, sse->se, ESP_GATTS_CONNECT_EVT, &ep);
+  }
+  esp_ble_conn_update_params_t conn_params = {0};
+  memcpy(conn_params.bda, ce->bc.peer_addr, ESP_BD_ADDR_LEN);
+  conn_params.latency = 0;
+  conn_params.max_int = 0x50; /* max_int = 0x50*1.25ms = 100ms */
+  conn_params.min_int = 0x30; /* min_int = 0x30*1.25ms = 60ms */
+  conn_params.timeout = 400;  /* timeout = 400*10ms = 4000ms */
+  esp_ble_gap_update_conn_params(&conn_params);
+}
+
+void esp32_bt_gatts_auth_cmpl(const esp_bd_addr_t addr) {
+  struct esp32_gatts_connection_entry *ce, *ct;
+  SLIST_FOREACH_SAFE(ce, &s_conns, next, ct) {
+    if (mgos_bt_addr_cmp(ce->bc.peer_addr, addr) == 0 && ce->need_auth) {
+      ce->need_auth = false;
+      create_sessions(ce);
+    }
+  }
+}
+
 static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
                               esp_ble_gatts_cb_param_t *ep) {
   char buf[BT_UUID_STR_LEN];
@@ -436,31 +486,45 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       const struct gatts_connect_evt_param *p = &ep->connect;
       LOG(LL_INFO, ("CONNECT cid %d addr %s", p->conn_id,
                     mgos_bt_addr_to_str(p->remote_bda, buf)));
-      esp_ble_conn_update_params_t conn_params = {0};
-      memcpy(conn_params.bda, p->remote_bda, ESP_BD_ADDR_LEN);
-      conn_params.latency = 0;
-      conn_params.max_int = 0x50; /* max_int = 0x50*1.25ms = 100ms */
-      conn_params.min_int = 0x30; /* min_int = 0x30*1.25ms = 60ms */
-      conn_params.timeout = 400;  /* timeout = 400*10ms = 4000ms */
-      esp_ble_gap_update_conn_params(&conn_params);
       /* Connect disables advertising. Resume, if it's enabled. */
       esp32_bt_set_is_advertising(false);
       mgos_bt_gap_set_adv_enable(mgos_bt_gap_get_adv_enable());
+      bool disconnect = false;
+      esp_ble_sec_act_t sec = 0;
       switch (mgos_sys_config_get_bt_gatts_min_sec_level()) {
         case MGOS_BT_GATT_PERM_LEVEL_NONE:
           break;
         case MGOS_BT_GATT_PERM_LEVEL_ENCR:
-          LOG(LL_DEBUG, ("%s: Requesting encryption",
-                         mgos_bt_addr_to_str(p->remote_bda, buf)));
-          esp_ble_set_encryption((uint8_t *) p->remote_bda,
-                                 ESP_BLE_SEC_ENCRYPT_NO_MITM);
+          sec = ESP_BLE_SEC_ENCRYPT_NO_MITM;
           break;
         case MGOS_BT_GATT_PERM_LEVEL_ENCR_MITM:
-          LOG(LL_DEBUG, ("%s: Requesting encryption + MITM protection",
-                         mgos_bt_addr_to_str(p->remote_bda, buf)));
-          esp_ble_set_encryption((uint8_t *) p->remote_bda,
-                                 ESP_BLE_SEC_ENCRYPT_MITM);
+          sec = ESP_BLE_SEC_ENCRYPT_MITM;
           break;
+      }
+      if (mgos_sys_config_get_bt_gatts_require_pairing()) {
+        mgos_bt_addr_to_str(p->remote_bda, buf);
+        int max_devices = mgos_sys_config_get_bt_max_paired_devices();
+        if (is_paired(p->remote_bda)) {
+          LOG(LL_INFO, ("%s: Already paired", buf));
+        } else if (!mgos_bt_gap_get_pairing_enable()) {
+          LOG(LL_ERROR, ("%s: pairing required but is not allowed", buf));
+          disconnect = true;
+        } else if (max_devices >= 0 &&
+                   mgos_bt_ble_get_num_paired_devices() >= max_devices) {
+          LOG(LL_ERROR,
+              ("%s: pairing required but max num devices (%d) reached", buf,
+               max_devices));
+          disconnect = true;
+        } else {
+          LOG(LL_INFO, ("%s: Begin pairing", buf));
+          if (sec == 0) sec = ESP_BLE_SEC_ENCRYPT_NO_MITM;
+        }
+      }
+      if (disconnect) {
+        LOG(LL_ERROR, ("%s: dropping connection",
+                       mgos_bt_addr_to_str(p->remote_bda, buf)));
+        esp_ble_gap_disconnect((uint8_t *) p->remote_bda);
+        break;
       }
       struct esp32_gatts_connection_entry *ce =
           (struct esp32_gatts_connection_entry *) calloc(1, sizeof(*ce));
@@ -468,15 +532,16 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       ce->bc.conn_id = p->conn_id;
       ce->bc.mtu = ESP_GATT_DEF_BLE_MTU_SIZE;
       memcpy(ce->bc.peer_addr, p->remote_bda, ESP_BD_ADDR_LEN);
-      /* Create a session for each of the currently registered services. */
-      struct esp32_bt_service_entry *se;
-      SLIST_FOREACH(se, &s_svcs, next) {
-        struct esp32_gatts_session_entry *sse =
-            (struct esp32_gatts_session_entry *) calloc(1, sizeof(*sse));
-        sse->se = se;
-        sse->bs.bc = &ce->bc;
-        SLIST_INSERT_HEAD(&ce->sessions, sse, next);
-        run_on_mgos_task(gatts_if, sse, sse->se, ev, ep);
+      if (sec != 0) {
+        LOG(LL_DEBUG,
+            ("%s: Requesting encryption%s",
+             mgos_bt_addr_to_str(p->remote_bda, buf),
+             (sec == ESP_BLE_SEC_ENCRYPT_MITM ? " + MITM protection" : "")));
+        esp_ble_set_encryption((uint8_t *) p->remote_bda, sec);
+        ce->need_auth = true;
+        /* Wait for AUTH_CMPL */
+      } else {
+        create_sessions(ce);
       }
       SLIST_INSERT_HEAD(&s_conns, ce, next);
       break;

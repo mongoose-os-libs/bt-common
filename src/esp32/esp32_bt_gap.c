@@ -20,6 +20,7 @@
 #include "mgos_sys_config.h"
 
 #include "esp32_bt_internal.h"
+#include "esp32_bt_gatts.h"
 
 struct scan_cb_info {
   esp_bd_addr_t target_addr;
@@ -63,6 +64,8 @@ static esp_ble_adv_params_t s_adv_params = {
     .channel_map = ADV_CHNL_ALL,
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
+
+static bool s_pairing_enable = false;
 
 static bool start_advertising(void) {
   if (s_advertising) return true;
@@ -246,6 +249,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
       LOG(ll, ("AUTH_CMPL peer %s at %d dt %d success %d (fr %d) kp %d kt %d",
                mgos_bt_addr_to_str(p->bd_addr, buf), p->addr_type, p->dev_type,
                p->success, p->fail_reason, p->key_present, p->key_type));
+      if (p->success) esp32_bt_gatts_auth_cmpl(p->bd_addr);
       break;
     }
     case ESP_GAP_BLE_KEY_EVT: {
@@ -492,6 +496,45 @@ void esp32_bt_set_is_advertising(bool is_advertising) {
   s_advertising = is_advertising;
 }
 
+bool mgos_bt_gap_get_pairing_enable(void) {
+  return s_pairing_enable;
+}
+
+bool mgos_bt_gap_set_pairing_enable(bool pairing_enable) {
+  esp_ble_auth_req_t auth_req =
+      (pairing_enable ? ESP_LE_AUTH_BOND : ESP_LE_AUTH_NO_BOND);
+  if (esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req,
+                                     sizeof(auth_req)) == ESP_OK) {
+    s_pairing_enable = pairing_enable;
+    return true;
+  } else {
+    return false;
+  }
+}
+
+void mgos_bt_ble_remove_paired_device(const esp_bd_addr_t addr) {
+  /* Workaround for https://github.com/espressif/esp-idf/issues/1365 */
+  if (mgos_bt_gatts_get_num_connections() > 0) {
+    esp_ble_gap_disconnect((uint8_t *) addr);
+    /* After disconnecting, some time is required before
+     * esp_ble_remove_bond_device can succeed. */
+    mgos_msleep(200);
+  }
+
+  esp_ble_remove_bond_device((uint8_t *) addr);
+}
+
+void mgos_bt_ble_remove_all_paired_devices(void) {
+  int num = esp_ble_get_bond_device_num();
+  esp_ble_bond_dev_t *list = (esp_ble_bond_dev_t *) calloc(num, sizeof(*list));
+  if (list != NULL && esp_ble_get_bond_device_list(&num, list) == ESP_OK) {
+    for (int i = 0; i < num; i++) {
+      mgos_bt_ble_remove_paired_device(list[i].bd_addr);
+    }
+  }
+  free(list);
+}
+
 bool esp32_bt_gap_init(void) {
   if (esp_ble_gap_register_callback(esp32_bt_gap_ev) != ESP_OK) {
     return false;
@@ -515,9 +558,8 @@ bool esp32_bt_gap_init(void) {
     }
   }
 
-  esp_ble_auth_req_t auth_req = ESP_LE_AUTH_BOND;
-  esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req,
-                                 sizeof(auth_req));
+  mgos_bt_gap_set_pairing_enable(mgos_sys_config_get_bt_allow_pairing());
+
   esp_ble_io_cap_t io_cap = ESP_IO_CAP_NONE;
   esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &io_cap,
                                  sizeof(uint8_t));
