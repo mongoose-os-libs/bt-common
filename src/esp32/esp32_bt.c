@@ -16,6 +16,7 @@
 #include "esp_bt_main.h"
 #include "esp_gap_ble_api.h"
 #include "esp_gatt_common_api.h"
+#include "nvs.h"
 
 #include "common/mg_str.h"
 
@@ -165,6 +166,20 @@ static void mgos_bt_net_ev(enum mgos_net_event ev,
 
 int mgos_bt_ble_get_num_paired_devices(void) {
   return esp_ble_get_bond_device_num();
+}
+
+/* Workaround for https://github.com/espressif/esp-idf/issues/1406 */
+bool esp32_bt_wipe_config(void) {
+  bool result = false;
+  nvs_handle h = 0;
+  /* CONFIG_FILE_PATH form btc_config.c */
+  if (nvs_open("bt_config.conf", NVS_READWRITE, &h) != ESP_OK) goto clean;
+  if (nvs_erase_key(h, "bt_cfg_key") != ESP_OK) goto clean;
+  result = true;
+
+clean:
+  if (h != 0) nvs_close(h);
+  return result;
 }
 
 bool mgos_bt_common_init(void) {

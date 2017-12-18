@@ -13,6 +13,7 @@
 #include "esp_bt.h"
 #include "esp_bt_defs.h"
 #include "esp_gap_ble_api.h"
+#include "nvs.h"
 
 #include "frozen/frozen.h"
 
@@ -60,7 +61,7 @@ static esp_ble_adv_params_t s_adv_params = {
     .adv_int_min = 0x50,  /* 0x100 * 0.625 = 100 ms */
     .adv_int_max = 0x100, /* 0x200 * 0.625 = 200 ms */
     .adv_type = ADV_TYPE_IND,
-    .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
+    .own_addr_type = BLE_ADDR_TYPE_RANDOM,
     .channel_map = ADV_CHNL_ALL,
     .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
 };
@@ -566,6 +567,14 @@ bool esp32_bt_gap_init(void) {
   uint8_t key_size = 16;
   esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size,
                                  sizeof(key_size));
+
+  if (mgos_sys_config_get_bt_random_address()) {
+    esp_ble_gap_config_local_privacy(true);
+    s_adv_params.own_addr_type = BLE_ADDR_TYPE_RANDOM;
+  } else {
+    esp_ble_gap_config_local_privacy(false);
+    s_adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
+  }
 
   return mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
 }
