@@ -149,9 +149,7 @@ enum cs_log_level ll_from_status(esp_bt_status_t status) {
   return (status == ESP_BT_STATUS_SUCCESS ? LL_DEBUG : LL_ERROR);
 }
 
-static void mgos_bt_net_ev(enum mgos_net_event ev,
-                           const struct mgos_net_event_data *ev_data,
-                           void *arg) {
+static void mgos_bt_net_ev(int ev, void *evd, void *arg) {
   if (ev != MGOS_NET_EV_IP_ACQUIRED) return;
   LOG(LL_INFO, ("Network is up, disabling Bluetooth"));
   mgos_sys_config_set_bt_enable(false);
@@ -235,7 +233,7 @@ bool mgos_bt_common_init(void) {
   }
 
   if (!mgos_sys_config_get_bt_keep_enabled()) {
-    mgos_net_add_event_handler(mgos_bt_net_ev, NULL);
+    mgos_event_add_group_handler(MGOS_EVENT_GRP_NET, mgos_bt_net_ev, NULL);
   }
 
   LOG(LL_INFO, ("Bluetooth init ok, pairing %s, %d paired devices",
