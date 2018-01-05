@@ -36,6 +36,14 @@ bool mgos_bt_gatts_register_service(const esp_gatts_attr_db_t *svc_descr,
 
 int mgos_bt_gatts_get_num_connections(void);
 
+/*
+ * A drop-in replacement for `esp_ble_gatts_send_indicate()`, but queues
+ * requests if some is already in flight.
+ */
+bool mgos_bt_gatts_send_indicate(esp_gatt_if_t gatts_if, uint16_t conn_id,
+                                 uint16_t attr_handle, struct mg_str value,
+                                 bool need_confirm);
+
 #ifdef __cplusplus
 }
 #endif

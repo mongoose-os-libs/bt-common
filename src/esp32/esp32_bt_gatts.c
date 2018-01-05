@@ -59,6 +59,15 @@ struct esp32_gatts_connection_entry {
   SLIST_ENTRY(esp32_gatts_connection_entry) next;
 };
 
+struct ind_pending {
+  esp_gatt_if_t gatts_if;
+  uint16_t conn_id;
+  uint16_t handle;
+  struct mg_str value;
+  bool need_confirm;
+  STAILQ_ENTRY(ind_pending) next;
+};
+
 struct esp32_gatts_ev_info {
   esp_gatt_if_t gatts_if;
   struct esp32_bt_service_entry *se;
@@ -71,6 +80,9 @@ static SLIST_HEAD(s_svcs, esp32_bt_service_entry) s_svcs =
     SLIST_HEAD_INITIALIZER(s_svcs);
 static SLIST_HEAD(s_conns, esp32_gatts_connection_entry) s_conns =
     SLIST_HEAD_INITIALIZER(s_conns);
+
+static STAILQ_HEAD(s_inds_pending, ind_pending)
+    s_inds_pending = STAILQ_HEAD_INITIALIZER(s_inds_pending);
 
 static bool s_gatts_registered = false;
 static esp_gatt_if_t s_gatts_if;
@@ -224,6 +236,45 @@ static void gatts_ev_mgos(void *arg) {
     }
     case ESP_GATTS_DISCONNECT_EVT: {
       free(ei->sse);
+      break;
+    }
+    case ESP_GATTS_CONF_EVT: {
+      /*
+       * Get the first item from the queue, it corresponds to the current CONF
+       * event.
+       */
+      struct ind_pending *indp = STAILQ_FIRST(&s_inds_pending);
+      STAILQ_REMOVE_HEAD(&s_inds_pending, next);
+
+      /*
+       * Call user's callback (since SDK doesn't provide `handle` for the CONF
+       * event, it's called with `ei->sse` set to NULL, and thus we couldn't
+       * call user's callback above for that event)
+       */
+      struct esp32_gatts_session_entry *sse =
+          find_session(indp->gatts_if, indp->conn_id, indp->handle);
+      if (sse != NULL) {
+        sse->se->cb(&sse->bs, ei->ev, &ei->ep);
+      } else {
+        LOG(LL_ERROR, ("CONF on unknown conn_id %d and handle %d",
+                       indp->conn_id, indp->handle));
+      }
+
+      free((char *) indp->value.p);
+      free(indp);
+
+      /* If there are some pending request(s), fire the next one */
+      if (!STAILQ_EMPTY(&s_inds_pending)) {
+        indp = STAILQ_FIRST(&s_inds_pending);
+        esp_ble_gatts_send_indicate(indp->gatts_if, indp->conn_id, indp->handle,
+                                    indp->value.len, (uint8_t *) indp->value.p,
+                                    indp->need_confirm);
+        /*
+         * TODO(dfrank) if esp_ble_gatts_send_indicate has returned non-ok,
+         * ideally we should emulate CONF event fully, with calling user
+         * callback, etc
+         */
+      }
       break;
     }
     default:
@@ -425,6 +476,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
     case ESP_GATTS_CONF_EVT: {
       const struct gatts_conf_evt_param *p = &ep->conf;
       LOG(LL_DEBUG, ("CONF cid %d st %d", p->conn_id, p->status));
+      run_on_mgos_task(gatts_if, NULL, NULL, ev, ep);
       break;
     }
     case ESP_GATTS_UNREG_EVT: {
@@ -695,6 +747,37 @@ int mgos_bt_gatts_get_num_connections(void) {
   struct esp32_gatts_connection_entry *ce;
   SLIST_FOREACH(ce, &s_conns, next) num++;
   return num;
+}
+
+bool mgos_bt_gatts_send_indicate(esp_gatt_if_t gatts_if, uint16_t conn_id,
+                                 uint16_t attr_handle, struct mg_str value,
+                                 bool need_confirm) {
+  esp_err_t r = ESP_OK;
+
+  struct ind_pending *indp = calloc(1, sizeof(*indp));
+  indp->gatts_if = gatts_if;
+  indp->conn_id = conn_id;
+  indp->handle = attr_handle;
+  indp->need_confirm = need_confirm;
+  indp->value = mg_strdup(value);
+
+  /*
+   * Check whether the queue was empty before the call. Note that we can't
+   * just call STAILQ_INSERT_TAIL later, because CONF event might be triggered
+   * even before `esp_ble_gatts_send_indicate` returns, and event handler
+   * expects the queue to be non-empty.
+   */
+  bool empty = STAILQ_EMPTY(&s_inds_pending);
+
+  STAILQ_INSERT_TAIL(&s_inds_pending, indp, next);
+
+  if (empty) {
+    /* Queue was empty, so send the indication/notification immediately */
+    r = esp_ble_gatts_send_indicate(gatts_if, conn_id, attr_handle, value.len,
+                                    (uint8_t *) value.p, need_confirm);
+  }
+
+  return r == ESP_OK;
 }
 
 bool esp32_bt_gatts_init(void) {
