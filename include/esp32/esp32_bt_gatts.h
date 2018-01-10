@@ -44,6 +44,17 @@ bool mgos_bt_gatts_send_indicate(esp_gatt_if_t gatts_if, uint16_t conn_id,
                                  uint16_t attr_handle, struct mg_str value,
                                  bool need_confirm);
 
+/*
+ * Return whether the send queue (which is used by
+ * mgos_bt_gatts_send_indicate) is empty
+ */
+bool mgos_bt_gatts_is_send_queue_empty(void);
+
+/*
+ * Close GATTS connection
+ */
+bool mgos_bt_gatts_close(esp_gatt_if_t gatts_if, uint16_t conn_id);
+
 #ifdef __cplusplus
 }
 #endif

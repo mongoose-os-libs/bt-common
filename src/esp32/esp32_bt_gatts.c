@@ -749,6 +749,10 @@ int mgos_bt_gatts_get_num_connections(void) {
   return num;
 }
 
+bool mgos_bt_gatts_is_send_queue_empty(void) {
+  return STAILQ_EMPTY(&s_inds_pending);
+}
+
 bool mgos_bt_gatts_send_indicate(esp_gatt_if_t gatts_if, uint16_t conn_id,
                                  uint16_t attr_handle, struct mg_str value,
                                  bool need_confirm) {
@@ -767,7 +771,7 @@ bool mgos_bt_gatts_send_indicate(esp_gatt_if_t gatts_if, uint16_t conn_id,
    * even before `esp_ble_gatts_send_indicate` returns, and event handler
    * expects the queue to be non-empty.
    */
-  bool empty = STAILQ_EMPTY(&s_inds_pending);
+  bool empty = mgos_bt_gatts_is_send_queue_empty();
 
   STAILQ_INSERT_TAIL(&s_inds_pending, indp, next);
 
@@ -779,6 +783,10 @@ bool mgos_bt_gatts_send_indicate(esp_gatt_if_t gatts_if, uint16_t conn_id,
   }
 
   return r == ESP_OK;
+}
+
+bool mgos_bt_gatts_close(esp_gatt_if_t gatts_if, uint16_t conn_id) {
+  return esp_ble_gatts_close(gatts_if, conn_id) == ESP_OK;
 }
 
 bool esp32_bt_gatts_init(void) {
