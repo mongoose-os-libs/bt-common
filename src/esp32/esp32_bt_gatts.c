@@ -773,8 +773,9 @@ bool mgos_bt_gatts_send_indicate(esp_gatt_if_t gatts_if, uint16_t conn_id,
 
   if (empty) {
     /* Queue was empty, so send the indication/notification immediately */
-    r = esp_ble_gatts_send_indicate(gatts_if, conn_id, attr_handle, value.len,
-                                    (uint8_t *) value.p, need_confirm);
+    r = esp_ble_gatts_send_indicate(gatts_if, conn_id, attr_handle,
+                                    indp->value.len, (uint8_t *) indp->value.p,
+                                    need_confirm);
   }
 
   return r == ESP_OK;
