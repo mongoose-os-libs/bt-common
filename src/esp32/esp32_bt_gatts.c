@@ -244,6 +244,16 @@ static void gatts_ev_mgos(void *arg) {
        * event.
        */
       struct ind_pending *indp = STAILQ_FIRST(&s_inds_pending);
+      if (indp == NULL) {
+        /*
+         * Unsolicited CONF event; one reason to get it is to use
+         * esp_ble_gatts_send_indicate() instead of
+         * mgos_bt_gatts_send_indicate(), but there are other weird cases;
+         * e.g. see this:
+         * https://github.com/cesanta/dev/blob/aa17ba60f16119f8b10658304ee6e612ba223d75/mos_libs/uart-bridge/src/bt_svc/bt_svc_esp32.c#L185
+         */
+        break;
+      }
       STAILQ_REMOVE_HEAD(&s_inds_pending, next);
 
       /*
