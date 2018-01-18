@@ -7,7 +7,6 @@
 #include "esp32_bt_internal.h"
 
 #include <stdbool.h>
-#include <stdio.h>
 #include <stdlib.h>
 
 #include "bta_api.h"
@@ -24,33 +23,21 @@
 #include "mgos_net.h"
 #include "mgos_sys_config.h"
 
-const char *mgos_bt_addr_to_str(const esp_bd_addr_t addr, char *out) {
-  sprintf(out, "%02x:%02x:%02x:%02x:%02x:%02x", addr[0], addr[1], addr[2],
-          addr[3], addr[4], addr[5]);
-  return out;
+const char *esp32_bt_addr_to_str(const esp_bd_addr_t addr, char *out) {
+  return mgos_bt_addr_to_str((const struct mgos_bt_addr *) &addr[0], out);
 }
 
-bool mgos_bt_addr_from_str(const struct mg_str addr_str, esp_bd_addr_t addr) {
-  unsigned int a[6];
-  struct mg_str addr_str_nul = mg_strdup_nul(addr_str);
-  bool result = (sscanf(addr_str_nul.p, "%02x:%02x:%02x:%02x:%02x:%02x", &a[0],
-                        &a[1], &a[2], &a[3], &a[4], &a[5]) == 6);
-  if (result) {
-    for (int i = 0; i < 6; i++) {
-      addr[i] = a[i];
-    }
-  }
-  free((void *) addr_str_nul.p);
-  return result;
+bool esp32_bt_addr_from_str(const struct mg_str addr_str, esp_bd_addr_t addr) {
+  return mgos_bt_addr_from_str(addr_str, (struct mgos_bt_addr *) &addr[0]);
 }
 
-int mgos_bt_addr_cmp(const esp_bd_addr_t a, const esp_bd_addr_t b) {
-  return memcmp(a, b, ESP_BD_ADDR_LEN);
+int esp32_bt_addr_cmp(const esp_bd_addr_t a, const esp_bd_addr_t b) {
+  return mgos_bt_addr_cmp((const struct mgos_bt_addr *) &a[0],
+                          (const struct mgos_bt_addr *) &b[0]);
 }
 
-bool mgos_bt_addr_is_null(const esp_bd_addr_t a) {
-  const esp_bd_addr_t null_addr = {0};
-  return (mgos_bt_addr_cmp(a, null_addr) == 0);
+bool esp32_bt_addr_is_null(const esp_bd_addr_t addr) {
+  return mgos_bt_addr_is_null((const struct mgos_bt_addr *) &addr[0]);
 }
 
 const char *bt_uuid128_to_str(const uint8_t *u, char *out) {

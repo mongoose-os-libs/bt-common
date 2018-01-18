@@ -18,8 +18,8 @@ extern "C" {
 #endif
 
 typedef void (*mgos_bt_gattc_open_cb)(int conn_id, bool result, void *arg);
-void mgos_bt_gattc_open_addr(const esp_bd_addr_t addr, mgos_bt_gattc_open_cb cb,
-                             void *cb_arg);
+void mgos_bt_gattc_open_addr(const struct mgos_bt_addr *addr,
+                             mgos_bt_gattc_open_cb cb, void *cb_arg);
 void mgos_bt_gattc_open_name(const struct mg_str name, mgos_bt_gattc_open_cb cb,
                              void *cb_arg);
 

@@ -24,7 +24,7 @@
 #include "esp32_bt_gatts.h"
 
 struct scan_cb_info {
-  esp_bd_addr_t target_addr;
+  struct mgos_bt_addr target_addr;
   struct mg_str target_name;
   mgos_bt_ble_scan_cb_t cb;
   void *cb_arg;
@@ -150,14 +150,14 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
               p->ble_adv, ESP_BLE_AD_TYPE_NAME_CMPL, &name_len);
           LOG(LL_DEBUG,
               ("SCAN_RESULT addr %s name %.*s type %d RSSI %d adl %d srl %d",
-               mgos_bt_addr_to_str(p->bda, buf), (int) name_len,
+               esp32_bt_addr_to_str(p->bda, buf), (int) name_len,
                (name ? (const char *) name : ""), p->dev_type, p->rssi,
                p->adv_data_len, p->scan_rsp_len));
           struct mgos_bt_ble_scan_result *r = NULL;
           struct scan_ctx *sctx = s_scan_ctx;
           if (sctx == NULL) break;
           for (int i = 0; i < sctx->num_res; i++) {
-            if (mgos_bt_addr_cmp(sctx->res[i].addr, p->bda) == 0) {
+            if (esp32_bt_addr_cmp(sctx->res[i].addr.addr, p->bda) == 0) {
               r = &sctx->res[i];
               free((void *) r->adv_data.p);
               break;
@@ -181,7 +181,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
           /* See if there are any scans waiting for this specific device */
           struct scan_cb_info *cbi, *cbit;
           SLIST_FOREACH_SAFE(cbi, &sctx->cbs, next, cbit) {
-            if (mgos_bt_addr_cmp(r->addr, cbi->target_addr) == 0 ||
+            if (mgos_bt_addr_cmp(&r->addr, &cbi->target_addr) == 0 ||
                 (name_len > 0 &&
                  mg_strcmp(mg_mk_str_n(r->name, name_len), cbi->target_name) ==
                      0)) {
@@ -248,33 +248,33 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
       const esp_ble_auth_cmpl_t *p = &ep->ble_security.auth_cmpl;
       enum cs_log_level ll = (p->success ? LL_INFO : LL_ERROR);
       LOG(ll, ("AUTH_CMPL peer %s at %d dt %d success %d (fr %d) kp %d kt %d",
-               mgos_bt_addr_to_str(p->bd_addr, buf), p->addr_type, p->dev_type,
+               esp32_bt_addr_to_str(p->bd_addr, buf), p->addr_type, p->dev_type,
                p->success, p->fail_reason, p->key_present, p->key_type));
       if (p->success) esp32_bt_gatts_auth_cmpl(p->bd_addr);
       break;
     }
     case ESP_GAP_BLE_KEY_EVT: {
       const esp_ble_key_t *p = &ep->ble_security.ble_key;
-      LOG(LL_DEBUG, ("KEY peer %s kt %d", mgos_bt_addr_to_str(p->bd_addr, buf),
+      LOG(LL_DEBUG, ("KEY peer %s kt %d", esp32_bt_addr_to_str(p->bd_addr, buf),
                      p->key_type));
       break;
     }
     case ESP_GAP_BLE_SEC_REQ_EVT: {
       esp_ble_sec_req_t *p = &ep->ble_security.ble_req;
-      LOG(LL_DEBUG, ("SEC_REQ peer %s", mgos_bt_addr_to_str(p->bd_addr, buf)));
+      LOG(LL_DEBUG, ("SEC_REQ peer %s", esp32_bt_addr_to_str(p->bd_addr, buf)));
       esp_ble_gap_security_rsp(p->bd_addr, true /* accept */);
       break;
     }
     case ESP_GAP_BLE_PASSKEY_NOTIF_EVT: {
       esp_ble_sec_key_notif_t *p = &ep->ble_security.key_notif;
       LOG(LL_DEBUG, ("PASSKEY_NOTIF peer %s pk %u",
-                     mgos_bt_addr_to_str(p->bd_addr, buf), p->passkey));
+                     esp32_bt_addr_to_str(p->bd_addr, buf), p->passkey));
       /*
        * TODO(rojer): Provide a callback interface for user to display the code.
        * For now, hope people read the logs. Yeah.
        */
       LOG(LL_ERROR, ("The passkey to pair with %s is %u",
-                     mgos_bt_addr_to_str(p->bd_addr, buf), p->passkey));
+                     esp32_bt_addr_to_str(p->bd_addr, buf), p->passkey));
       break;
     }
     case ESP_GAP_BLE_PASSKEY_REQ_EVT: {
@@ -329,7 +329,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
           &ep->update_conn_params;
       LOG(LL_DEBUG, ("UPDATE_CONN_PARAMS st %d addr %s int %u-%u lat %u "
                      "conn_int %u tout %u",
-                     p->status, mgos_bt_addr_to_str(p->bda, buf), p->min_int,
+                     p->status, esp32_bt_addr_to_str(p->bda, buf), p->min_int,
                      p->max_int, p->latency, p->conn_int, p->timeout));
       break;
     }
@@ -352,7 +352,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
           &ep->remove_bond_dev_cmpl;
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll, ("REMOVE_BOND_DEV_COMPLETE st %d bda %s", p->status,
-               mgos_bt_addr_to_str(p->bd_addr, buf)));
+               esp32_bt_addr_to_str(p->bd_addr, buf)));
       break;
     }
     case ESP_GAP_BLE_CLEAR_BOND_DEV_COMPLETE_EVT: {
@@ -370,7 +370,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
       } else {
         LOG(ll,
             ("GET_BOND_DEV_COMPLETE st %d dev_num %d peer_addr %s", p->status,
-             p->dev_num, mgos_bt_addr_to_str(p->bond_dev->bd_addr, buf)));
+             p->dev_num, esp32_bt_addr_to_str(p->bond_dev->bd_addr, buf)));
       }
       break;
     }
@@ -378,7 +378,7 @@ static void esp32_bt_gap_ev(esp_gap_ble_cb_event_t ev,
       const struct ble_read_rssi_cmpl_evt_param *p = &ep->read_rssi_cmpl;
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll, ("READ_RSSI_COMPLETE st %d rssi %d ra %s", p->status, p->rssi,
-               mgos_bt_addr_to_str(p->remote_addr, buf)));
+               esp32_bt_addr_to_str(p->remote_addr, buf)));
       break;
     }
     case ESP_GAP_BLE_ADD_WHITELIST_COMPLETE_EVT: {
@@ -402,8 +402,8 @@ static void scan_done_mgos_cb(void *arg) {
     if (cbi->cb == NULL) continue;
     int num_res = sctx->num_res;
     if (num_res >= 1 &&
-        ((!mgos_bt_addr_is_null(cbi->target_addr) &&
-          mgos_bt_addr_cmp(sctx->res->addr, cbi->target_addr) != 0) ||
+        ((!mgos_bt_addr_is_null(&cbi->target_addr) &&
+          mgos_bt_addr_cmp(&sctx->res->addr, &cbi->target_addr) != 0) ||
          (cbi->target_name.len > 0 &&
           mg_strcmp(mg_mk_str(sctx->res->name), cbi->target_name) != 0))) {
       num_res = 0;
@@ -441,7 +441,7 @@ void mgos_bt_ble_scan(const struct mgos_bt_ble_scan_opts *opts,
   if (cbi == NULL) return;
   cbi->cb = cb;
   cbi->cb_arg = cb_arg;
-  memcpy(cbi->target_addr, opts->addr, sizeof(cbi->target_addr));
+  memcpy(&cbi->target_addr, &opts->addr, sizeof(cbi->target_addr));
   cbi->target_name = mg_strdup(opts->name);
   int scan_interval_ms =
       (opts->interval_ms > 0 ? opts->interval_ms

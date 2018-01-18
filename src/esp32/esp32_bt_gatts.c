@@ -215,7 +215,7 @@ static void gatts_ev_mgos(void *arg) {
             const struct gatts_write_evt_param *wp = &ep.write;
             LOG(LL_DEBUG,
                 ("WRITE (prepared) %s cid %d tid 0x%08x h %u off %d len %d%s%s",
-                 mgos_bt_addr_to_str(wp->bda, buf), wp->conn_id, wp->trans_id,
+                 esp32_bt_addr_to_str(wp->bda, buf), wp->conn_id, wp->trans_id,
                  wp->handle, wp->offset, wp->len, (wp->is_prep ? " prep" : ""),
                  (wp->need_rsp ? " need_rsp" : "")));
             if (!sse->se->cb(&sse->bs, ESP_GATTS_WRITE_EVT, &ep)) {
@@ -335,7 +335,7 @@ static bool is_paired(const esp_bd_addr_t addr) {
   esp_ble_bond_dev_t *list = (esp_ble_bond_dev_t *) calloc(num, sizeof(*list));
   if (list != NULL && esp_ble_get_bond_device_list(&num, list) == ESP_OK) {
     for (int i = 0; i < num; i++) {
-      if (mgos_bt_addr_cmp(addr, list[i].bd_addr) == 0) {
+      if (esp32_bt_addr_cmp(addr, list[i].bd_addr) == 0) {
         result = true;
         break;
       }
@@ -350,7 +350,7 @@ static void create_sessions(struct esp32_gatts_connection_entry *ce) {
   struct esp32_bt_service_entry *se;
   esp_ble_gatts_cb_param_t ep;
   ep.connect.conn_id = ce->bc.conn_id;
-  memcpy(ep.connect.remote_bda, ce->bc.peer_addr, ESP_BD_ADDR_LEN);
+  memcpy(ep.connect.remote_bda, ce->bc.peer_addr.addr, ESP_BD_ADDR_LEN);
   SLIST_FOREACH(se, &s_svcs, next) {
     struct esp32_gatts_session_entry *sse =
         (struct esp32_gatts_session_entry *) calloc(1, sizeof(*sse));
@@ -360,7 +360,7 @@ static void create_sessions(struct esp32_gatts_connection_entry *ce) {
     run_on_mgos_task(ce->bc.gatt_if, sse, sse->se, ESP_GATTS_CONNECT_EVT, &ep);
   }
   esp_ble_conn_update_params_t conn_params = {0};
-  memcpy(conn_params.bda, ce->bc.peer_addr, ESP_BD_ADDR_LEN);
+  memcpy(conn_params.bda, ce->bc.peer_addr.addr, ESP_BD_ADDR_LEN);
   conn_params.latency = 0;
   conn_params.max_int = 0x50; /* max_int = 0x50*1.25ms = 100ms */
   conn_params.min_int = 0x30; /* min_int = 0x30*1.25ms = 60ms */
@@ -371,7 +371,7 @@ static void create_sessions(struct esp32_gatts_connection_entry *ce) {
 void esp32_bt_gatts_auth_cmpl(const esp_bd_addr_t addr) {
   struct esp32_gatts_connection_entry *ce, *ct;
   SLIST_FOREACH_SAFE(ce, &s_conns, next, ct) {
-    if (mgos_bt_addr_cmp(ce->bc.peer_addr, addr) == 0 && ce->need_auth) {
+    if (esp32_bt_addr_cmp(ce->bc.peer_addr.addr, addr) == 0 && ce->need_auth) {
       ce->need_auth = false;
       create_sessions(ce);
     }
@@ -395,7 +395,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
     case ESP_GATTS_READ_EVT: {
       const struct gatts_read_evt_param *p = &ep->read;
       LOG(LL_DEBUG, ("READ %s cid %d tid 0x%08x h %u off %d%s%s",
-                     mgos_bt_addr_to_str(p->bda, buf), p->conn_id, p->trans_id,
+                     esp32_bt_addr_to_str(p->bda, buf), p->conn_id, p->trans_id,
                      p->handle, p->offset, (p->is_long ? " long" : ""),
                      (p->need_rsp ? " need_rsp" : "")));
       struct esp32_gatts_session_entry *sse =
@@ -411,7 +411,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
     case ESP_GATTS_WRITE_EVT: {
       const struct gatts_write_evt_param *p = &ep->write;
       LOG(LL_DEBUG, ("WRITE %s cid %d tid 0x%08x h %u off %d len %d%s%s",
-                     mgos_bt_addr_to_str(p->bda, buf), p->conn_id, p->trans_id,
+                     esp32_bt_addr_to_str(p->bda, buf), p->conn_id, p->trans_id,
                      p->handle, p->offset, p->len, (p->is_prep ? " prep" : ""),
                      (p->need_rsp ? " need_rsp" : "")));
       struct esp32_gatts_session_entry *sse =
@@ -470,7 +470,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
     case ESP_GATTS_EXEC_WRITE_EVT: {
       const struct gatts_exec_write_evt_param *p = &ep->exec_write;
       LOG(LL_DEBUG, ("EXEC_WRITE %s cid %d tid 0x%08x flag %d",
-                     mgos_bt_addr_to_str(p->bda, buf), p->conn_id, p->trans_id,
+                     esp32_bt_addr_to_str(p->bda, buf), p->conn_id, p->trans_id,
                      p->exec_write_flag));
       run_on_mgos_task(gatts_if, NULL, NULL, ev, ep);
       break;
@@ -547,7 +547,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
     case ESP_GATTS_CONNECT_EVT: {
       const struct gatts_connect_evt_param *p = &ep->connect;
       LOG(LL_INFO, ("CONNECT cid %d addr %s", p->conn_id,
-                    mgos_bt_addr_to_str(p->remote_bda, buf)));
+                    esp32_bt_addr_to_str(p->remote_bda, buf)));
       /* Connect disables advertising. Resume, if it's enabled. */
       esp32_bt_set_is_advertising(false);
       mgos_bt_gap_set_adv_enable(mgos_bt_gap_get_adv_enable());
@@ -564,7 +564,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
           break;
       }
       if (mgos_sys_config_get_bt_gatts_require_pairing()) {
-        mgos_bt_addr_to_str(p->remote_bda, buf);
+        esp32_bt_addr_to_str(p->remote_bda, buf);
         int max_devices = mgos_sys_config_get_bt_max_paired_devices();
         if (is_paired(p->remote_bda)) {
           LOG(LL_INFO, ("%s: Already paired", buf));
@@ -584,7 +584,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       }
       if (disconnect) {
         LOG(LL_ERROR, ("%s: dropping connection",
-                       mgos_bt_addr_to_str(p->remote_bda, buf)));
+                       esp32_bt_addr_to_str(p->remote_bda, buf)));
         esp_ble_gap_disconnect((uint8_t *) p->remote_bda);
         break;
       }
@@ -593,11 +593,11 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       ce->bc.gatt_if = gatts_if;
       ce->bc.conn_id = p->conn_id;
       ce->bc.mtu = ESP_GATT_DEF_BLE_MTU_SIZE;
-      memcpy(ce->bc.peer_addr, p->remote_bda, ESP_BD_ADDR_LEN);
+      memcpy(ce->bc.peer_addr.addr, p->remote_bda, ESP_BD_ADDR_LEN);
       if (sec != 0) {
         LOG(LL_DEBUG,
             ("%s: Requesting encryption%s",
-             mgos_bt_addr_to_str(p->remote_bda, buf),
+             esp32_bt_addr_to_str(p->remote_bda, buf),
              (sec == ESP_BLE_SEC_ENCRYPT_MITM ? " + MITM protection" : "")));
         esp_ble_set_encryption((uint8_t *) p->remote_bda, sec);
         ce->need_auth = true;
@@ -611,7 +611,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
     case ESP_GATTS_DISCONNECT_EVT: {
       const struct gatts_disconnect_evt_param *p = &ep->disconnect;
       LOG(LL_INFO, ("DISCONNECT cid %d addr %s", p->conn_id,
-                    mgos_bt_addr_to_str(p->remote_bda, buf)));
+                    esp32_bt_addr_to_str(p->remote_bda, buf)));
 
       struct esp32_gatts_connection_entry *ce =
           find_connection(gatts_if, p->conn_id);

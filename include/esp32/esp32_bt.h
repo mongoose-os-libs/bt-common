@@ -13,13 +13,16 @@
 
 #include "common/mg_str.h"
 
-#define BT_ADDR_STR_LEN (ESP_BD_ADDR_LEN * 2 + ESP_BD_ADDR_LEN)
+#include "mgos_bt.h"
+
+#define MGOS_BT_DEV_NAME_LEN 32
 #define BT_UUID_STR_LEN (ESP_UUID_LEN_128 * 2 + ESP_UUID_LEN_128)
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#define MGOS_BT_ADDR_LEN 6
 #define MGOS_BT_DEV_NAME_LEN 32
 
 const uint16_t primary_service_uuid;
@@ -29,10 +32,10 @@ const uint8_t char_prop_read_write;
 const uint8_t char_prop_read_notify;
 const uint8_t char_prop_write;
 
-const char *mgos_bt_addr_to_str(const esp_bd_addr_t addr, char *out);
-bool mgos_bt_addr_from_str(const struct mg_str addr_str, esp_bd_addr_t addr);
-int mgos_bt_addr_cmp(const esp_bd_addr_t a, const esp_bd_addr_t b);
-bool mgos_bt_addr_is_null(const esp_bd_addr_t a);
+const char *esp32_bt_addr_to_str(const esp_bd_addr_t addr, char *out);
+bool esp32_bt_addr_from_str(const struct mg_str addr_str, esp_bd_addr_t addr);
+int esp32_bt_addr_cmp(const esp_bd_addr_t a, const esp_bd_addr_t b);
+bool esp32_bt_addr_is_null(const esp_bd_addr_t addr);
 
 const char *mgos_bt_uuid_to_str(const esp_bt_uuid_t *uuid, char *out);
 bool mgos_bt_uuid_from_str(const struct mg_str uuid_str, esp_bt_uuid_t *uuid);
@@ -40,7 +43,7 @@ int mgos_bt_uuid_cmp(const esp_bt_uuid_t *a, const esp_bt_uuid_t *b);
 
 struct esp32_bt_connection {
   esp_gatt_if_t gatt_if;
-  esp_bd_addr_t peer_addr;
+  struct mgos_bt_addr peer_addr;
   uint16_t conn_id;
   uint16_t mtu;
 };
@@ -58,7 +61,7 @@ struct mgos_bt_ble_scan_opts {
   struct mg_str name;
 };
 struct mgos_bt_ble_scan_result {
-  esp_bd_addr_t addr;
+  struct mgos_bt_addr addr;
   struct mg_str adv_data; /* Raw adv data */
   struct mg_str scan_rsp; /* Raw scan response (for active scans) */
   char name[MGOS_BT_DEV_NAME_LEN + 1]; /* NUL-terminated */
