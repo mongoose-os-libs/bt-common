@@ -33,28 +33,28 @@ void mgos_bt_gattc_list_services(int conn_id,
                                  void *cb_arg);
 
 struct mgos_bt_gattc_list_chars_result {
-  esp_bt_uuid_t char_id;
+  struct mgos_bt_uuid char_id;
   esp_gatt_char_prop_t char_prop;
 };
 
 typedef void (*mgos_bt_gattc_list_chars_cb_t)(
-    int conn_id, const esp_bt_uuid_t *svc_id, int num_res,
+    int conn_id, const struct mgos_bt_uuid *svc_id, int num_res,
     const struct mgos_bt_gattc_list_chars_result *res, void *arg);
-void mgos_bt_gattc_list_chars(int conn_id, const esp_bt_uuid_t *svc_id,
+void mgos_bt_gattc_list_chars(int conn_id, const struct mgos_bt_uuid *svc_id,
                               mgos_bt_gattc_list_chars_cb_t cb, void *cb_arg);
 
 typedef void (*mgos_bt_gattc_read_char_cb_t)(int conn_id, bool success,
                                              const struct mg_str value,
                                              void *arg);
-void mgos_bt_gattc_read_char(int conn_id, const esp_bt_uuid_t *svc_uuid,
-                             const esp_bt_uuid_t *char_uuid,
+void mgos_bt_gattc_read_char(int conn_id, const struct mgos_bt_uuid *svc_uuid,
+                             const struct mgos_bt_uuid *char_uuid,
                              esp_gatt_auth_req_t auth_req,
                              mgos_bt_gattc_read_char_cb_t cb, void *cb_arg);
 
 typedef void (*mgos_bt_gattc_write_char_cb_t)(int conn_id, bool success,
                                               void *arg);
-void mgos_bt_gattc_write_char(int conn_id, const esp_bt_uuid_t *svc_uuid,
-                              const esp_bt_uuid_t *char_uuid,
+void mgos_bt_gattc_write_char(int conn_id, const struct mgos_bt_uuid *svc_uuid,
+                              const struct mgos_bt_uuid *char_uuid,
                               bool response_required,
                               esp_gatt_auth_req_t auth_req,
                               const struct mg_str value,
@@ -63,8 +63,8 @@ void mgos_bt_gattc_write_char(int conn_id, const esp_bt_uuid_t *svc_uuid,
 typedef void (*mgos_bt_gattc_subscribe_cb_t)(int conn_id, bool success,
                                              const struct mg_str value,
                                              void *arg);
-void mgos_bt_gattc_subscribe(int conn_id, const esp_bt_uuid_t *svc_uuid,
-                             const esp_bt_uuid_t *char_uuid,
+void mgos_bt_gattc_subscribe(int conn_id, const struct mgos_bt_uuid *svc_uuid,
+                             const struct mgos_bt_uuid *char_uuid,
                              mgos_bt_gattc_subscribe_cb_t cb, void *cb_arg);
 
 void mgos_bt_gattc_close(int conn_id);

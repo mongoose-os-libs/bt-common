@@ -498,7 +498,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll,
           ("CREATE st %d svch %d svcid %s %d%s", p->status, p->service_handle,
-           mgos_bt_uuid_to_str(&p->service_id.id.uuid, buf),
+           esp32_bt_uuid_to_str(&p->service_id.id.uuid, buf),
            p->service_id.id.inst_id,
            (p->service_id.is_primary ? " primary" : "")));
       break;
@@ -515,7 +515,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll,
           ("ADD_CHAR st %d ah %u svch %u uuid %s", p->status, p->attr_handle,
-           p->service_handle, mgos_bt_uuid_to_str(&p->char_uuid, buf)));
+           p->service_handle, esp32_bt_uuid_to_str(&p->char_uuid, buf)));
       break;
     }
     case ESP_GATTS_ADD_CHAR_DESCR_EVT: {
@@ -523,7 +523,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll, ("ADD_CHAR_DESCR st %d ah %u svch %u uuid %s", p->status,
                p->attr_handle, p->service_handle,
-               mgos_bt_uuid_to_str(&p->char_uuid, buf)));
+               esp32_bt_uuid_to_str(&p->char_uuid, buf)));
       break;
     }
     case ESP_GATTS_DELETE_EVT: {
@@ -671,7 +671,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll,
           ("CREAT_ATTR_TAB st %d svc_uuid %s nh %d hh %p", p->status,
-           mgos_bt_uuid_to_str(&p->svc_uuid, buf), p->num_handle, p->handles));
+           esp32_bt_uuid_to_str(&p->svc_uuid, buf), p->num_handle, p->handles));
       if (p->status != 0) {
         LOG(LL_ERROR,
             ("Failed to register service attribute table: %d", p->status));
@@ -686,7 +686,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       run_on_mgos_task(gatts_if, NULL, se, ev, ep);
       uint16_t svch = se->attr_handles[0];
       LOG(LL_INFO,
-          ("Starting BT service %s", mgos_bt_uuid_to_str(&p->svc_uuid, buf)));
+          ("Starting BT service %s", esp32_bt_uuid_to_str(&p->svc_uuid, buf)));
       esp_ble_gatts_start_service(svch);
       break;
     }

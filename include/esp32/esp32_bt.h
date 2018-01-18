@@ -37,9 +37,9 @@ bool esp32_bt_addr_from_str(const struct mg_str addr_str, esp_bd_addr_t addr);
 int esp32_bt_addr_cmp(const esp_bd_addr_t a, const esp_bd_addr_t b);
 bool esp32_bt_addr_is_null(const esp_bd_addr_t addr);
 
-const char *mgos_bt_uuid_to_str(const esp_bt_uuid_t *uuid, char *out);
-bool mgos_bt_uuid_from_str(const struct mg_str uuid_str, esp_bt_uuid_t *uuid);
-int mgos_bt_uuid_cmp(const esp_bt_uuid_t *a, const esp_bt_uuid_t *b);
+const char *esp32_bt_uuid_to_str(const esp_bt_uuid_t *uuid, char *out);
+bool esp32_bt_uuid_from_str(const struct mg_str uuid_str, esp_bt_uuid_t *uuid);
+int esp32_bt_uuid_cmp(const esp_bt_uuid_t *a, const esp_bt_uuid_t *b);
 
 struct esp32_bt_connection {
   esp_gatt_if_t gatt_if;

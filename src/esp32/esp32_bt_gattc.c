@@ -263,7 +263,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
       const struct gattc_search_res_evt_param *p = &ep->search_res;
       LOG(LL_DEBUG,
           ("SEARCH_RES cid %u svc %s %d", p->conn_id,
-           mgos_bt_uuid_to_str(&p->srvc_id.uuid, buf), p->srvc_id.inst_id));
+           esp32_bt_uuid_to_str(&p->srvc_id.uuid, buf), p->srvc_id.inst_id));
       struct esp32_gattc_connection_entry *ce =
           find_connection_by_esp_conn_id(p->conn_id);
       if (ce == NULL) break;
@@ -496,8 +496,8 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
           if (count == 1) {
             LOG(LL_DEBUG,
                 ("%s %s -> CCCD handle %u",
-                 mgos_bt_uuid_to_str(&sc->svc_uuid, buf),
-                 mgos_bt_uuid_to_str(&sc->char_uuid, buf2), cccd.handle));
+                 esp32_bt_uuid_to_str(&sc->svc_uuid, buf),
+                 esp32_bt_uuid_to_str(&sc->char_uuid, buf2), cccd.handle));
             uint8_t notify_en[2] = {0x01, 0x00};
             sc->cccd_handle = cccd.handle;
             status = esp_ble_gattc_write_char_descr(
@@ -510,8 +510,8 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t gattc_if,
             }
           } else {
             LOG(LL_ERROR,
-                ("No CCCD for %s %s", mgos_bt_uuid_to_str(&sc->svc_uuid, buf),
-                 mgos_bt_uuid_to_str(&sc->char_uuid, buf2)));
+                ("No CCCD for %s %s", esp32_bt_uuid_to_str(&sc->svc_uuid, buf),
+                 esp32_bt_uuid_to_str(&sc->char_uuid, buf2)));
             sc->success = false;
           }
         }
@@ -748,13 +748,13 @@ struct esp32_gattc_list_chars_ctx {
 static void lc_done_mgos_cb(void *arg) {
   struct esp32_gattc_list_chars_ctx *lc_ctx =
       (struct esp32_gattc_list_chars_ctx *) arg;
-  lc_ctx->cb(lc_ctx->conn_id, &lc_ctx->svc_id, lc_ctx->num_res, lc_ctx->res,
-             lc_ctx->cb_arg);
+  lc_ctx->cb(lc_ctx->conn_id, (struct mgos_bt_uuid *) &lc_ctx->svc_id,
+             lc_ctx->num_res, lc_ctx->res, lc_ctx->cb_arg);
   free(lc_ctx->res);
   free(lc_ctx);
 }
 
-void mgos_bt_gattc_list_chars(int conn_id, const esp_bt_uuid_t *svc_id,
+void mgos_bt_gattc_list_chars(int conn_id, const struct mgos_bt_uuid *svc_id,
                               mgos_bt_gattc_list_chars_cb_t cb, void *cb_arg) {
   esp_gattc_char_elem_t *char_res = NULL;
   struct esp32_gattc_list_chars_ctx *lc_ctx = calloc(1, sizeof(*lc_ctx));
@@ -842,8 +842,8 @@ static esp_gatt_status_t esp32_gattc_get_char_handle(
 clean : {
   enum cs_log_level ll = (res == ESP_GATT_OK ? LL_DEBUG : LL_ERROR);
   char buf1[BT_UUID_STR_LEN], buf2[BT_UUID_STR_LEN];
-  LOG(ll, ("%s %s -> %u", mgos_bt_uuid_to_str(svc_id, buf1),
-           mgos_bt_uuid_to_str(char_id, buf2), *handle));
+  LOG(ll, ("%s %s -> %u", esp32_bt_uuid_to_str(svc_id, buf1),
+           esp32_bt_uuid_to_str(char_id, buf2), *handle));
 }
   return res;
 }
@@ -861,8 +861,8 @@ static void read_done_mgos_cb(void *arg) {
   free(rc);
 }
 
-void mgos_bt_gattc_read_char(int conn_id, const esp_bt_uuid_t *svc_uuid,
-                             const esp_bt_uuid_t *char_uuid,
+void mgos_bt_gattc_read_char(int conn_id, const struct mgos_bt_uuid *svc_uuid,
+                             const struct mgos_bt_uuid *char_uuid,
                              esp_gatt_auth_req_t auth_req,
                              mgos_bt_gattc_read_char_cb_t cb, void *cb_arg) {
   struct esp32_gattc_read_char_ctx *rc = calloc(1, sizeof(*rc));
@@ -877,7 +877,8 @@ void mgos_bt_gattc_read_char(int conn_id, const esp_bt_uuid_t *svc_uuid,
   rc->cb_arg = cb_arg;
   struct esp32_gattc_connection_entry *ce = NULL;
   esp_gatt_status_t st = esp32_gattc_get_char_handle(
-      conn_id, svc_uuid, char_uuid, &ce, &rc->handle);
+      conn_id, (esp_bt_uuid_t *) svc_uuid, (esp_bt_uuid_t *) char_uuid, &ce,
+      &rc->handle);
   if (st != ESP_GATT_OK) {
     rc->value_len = -1;
     goto clean;
@@ -903,8 +904,8 @@ static void write_done_mgos_cb(void *arg) {
   free(wc);
 }
 
-void mgos_bt_gattc_write_char(int conn_id, const esp_bt_uuid_t *svc_uuid,
-                              const esp_bt_uuid_t *char_uuid,
+void mgos_bt_gattc_write_char(int conn_id, const struct mgos_bt_uuid *svc_uuid,
+                              const struct mgos_bt_uuid *char_uuid,
                               bool response_required,
                               esp_gatt_auth_req_t auth_req,
                               const struct mg_str value,
@@ -921,7 +922,8 @@ void mgos_bt_gattc_write_char(int conn_id, const esp_bt_uuid_t *svc_uuid,
   wc->cb_arg = cb_arg;
   struct esp32_gattc_connection_entry *ce;
   esp_gatt_status_t st = esp32_gattc_get_char_handle(
-      conn_id, svc_uuid, char_uuid, &ce, &wc->handle);
+      conn_id, (esp_bt_uuid_t *) svc_uuid, (esp_bt_uuid_t *) char_uuid, &ce,
+      &wc->handle);
   if (st != ESP_GATT_OK) {
     wc->success = false;
     goto clean;
@@ -967,8 +969,8 @@ static void subscribe_mgos_cb(void *arg) {
   if (!sc->success) free(sc);
 }
 
-void mgos_bt_gattc_subscribe(int conn_id, const esp_bt_uuid_t *svc_uuid,
-                             const esp_bt_uuid_t *char_uuid,
+void mgos_bt_gattc_subscribe(int conn_id, const struct mgos_bt_uuid *svc_uuid,
+                             const struct mgos_bt_uuid *char_uuid,
                              mgos_bt_gattc_subscribe_cb_t cb, void *cb_arg) {
   struct esp32_gattc_subscribe_ctx *sc = calloc(1, sizeof(*sc));
   if (sc == NULL) {
@@ -982,7 +984,8 @@ void mgos_bt_gattc_subscribe(int conn_id, const esp_bt_uuid_t *svc_uuid,
   sc->cb_arg = cb_arg;
   struct esp32_gattc_connection_entry *ce;
   esp_gatt_status_t st = esp32_gattc_get_char_handle(
-      conn_id, svc_uuid, char_uuid, &ce, &sc->handle);
+      conn_id, (esp_bt_uuid_t *) svc_uuid, (esp_bt_uuid_t *) char_uuid, &ce,
+      &sc->handle);
   if (st != ESP_GATT_OK) {
     sc->success = false;
     goto clean;
