@@ -16,7 +16,7 @@ extern "C" {
 
 enum cs_log_level ll_from_status(esp_bt_status_t status);
 
-bool is_scanning(void);
+bool esp32_bt_is_scanning(void);
 bool esp32_bt_gattc_init(void);
 
 bool esp32_bt_init(void);

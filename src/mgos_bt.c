@@ -4,6 +4,8 @@
  */
 
 #include "mgos_bt.h"
+#include "mgos_bt_gattc.h"
+#include "mgos_system.h"
 
 #include <stdio.h>
 
@@ -119,4 +121,26 @@ int mgos_bt_uuid_cmp(const struct mgos_bt_uuid *a,
     }
   }
   return result;
+}
+
+struct mgos_event_info {
+  int ev;
+};
+
+static void trigger_cb(void *arg) {
+  struct mgos_event_info *ei = arg;
+  void *ev_data = ei + 1;
+  mgos_event_trigger(ei->ev, ev_data);
+  if (ei->ev == MGOS_BT_GATTC_EVENT_READ) {
+    struct mgos_bt_gattc_read *p = ev_data;
+    free((void *) p->data.p);
+  }
+  free(ei);
+}
+
+void mgos_event_trigger_schedule(int ev, const void *ev_data, size_t data_len) {
+  struct mgos_event_info *ei = malloc(sizeof(*ei) + data_len);
+  ei->ev = ev;
+  memcpy(ei + 1, ev_data, data_len);
+  mgos_invoke_cb(trigger_cb, ei, false /* from_isr */);
 }

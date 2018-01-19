@@ -63,9 +63,9 @@ void mgos_bt_gattc_write_char(int conn_id, const struct mgos_bt_uuid *svc_uuid,
 typedef void (*mgos_bt_gattc_subscribe_cb_t)(int conn_id, bool success,
                                              const struct mg_str value,
                                              void *arg);
-void mgos_bt_gattc_subscribe(int conn_id, const struct mgos_bt_uuid *svc_uuid,
-                             const struct mgos_bt_uuid *char_uuid,
-                             mgos_bt_gattc_subscribe_cb_t cb, void *cb_arg);
+void esp32_gattc_subscribe(int conn_id, const struct mgos_bt_uuid *svc_uuid,
+                           const struct mgos_bt_uuid *char_uuid,
+                           mgos_bt_gattc_subscribe_cb_t cb, void *cb_arg);
 
 void mgos_bt_gattc_close(int conn_id);
 

@@ -23,7 +23,6 @@ extern "C" {
 #endif
 
 #define MGOS_BT_ADDR_LEN 6
-#define MGOS_BT_DEV_NAME_LEN 32
 
 const uint16_t primary_service_uuid;
 const uint16_t char_decl_uuid;

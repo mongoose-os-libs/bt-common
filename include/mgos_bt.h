@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 #include "common/mg_str.h"
+#include "mgos_event.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,6 +48,8 @@ const char *mgos_bt_uuid_to_str(const struct mgos_bt_uuid *uuid, char *out);
 bool mgos_bt_uuid_from_str(const struct mg_str str, struct mgos_bt_uuid *uuid);
 int mgos_bt_uuid_cmp(const struct mgos_bt_uuid *a,
                      const struct mgos_bt_uuid *b);
+
+void mgos_event_trigger_schedule(int ev, const void *ev_data, size_t data_len);
 
 #ifdef __cplusplus
 }
