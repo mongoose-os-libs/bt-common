@@ -15,6 +15,8 @@
 #include "esp_gap_ble_api.h"
 #include "nvs.h"
 
+#include "common/str_util.h"
+
 #include "frozen/frozen.h"
 
 #include "mgos_bt_gap.h"
