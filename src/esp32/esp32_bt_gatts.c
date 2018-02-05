@@ -90,6 +90,7 @@ static esp_gatt_if_t s_gatts_if;
 const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
 const uint16_t char_decl_uuid = ESP_GATT_UUID_CHAR_DECLARE;
 const uint16_t char_client_config_uuid = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
+const uint8_t char_prop_read = ESP_GATT_CHAR_PROP_BIT_READ;
 const uint8_t char_prop_read_write =
     (ESP_GATT_CHAR_PROP_BIT_READ | ESP_GATT_CHAR_PROP_BIT_WRITE);
 const uint8_t char_prop_read_notify =
