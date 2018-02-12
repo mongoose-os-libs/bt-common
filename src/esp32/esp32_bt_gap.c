@@ -377,9 +377,9 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
                esp32_bt_addr_to_str(p->remote_addr, buf)));
       break;
     }
-    case ESP_GAP_BLE_ADD_WHITELIST_COMPLETE_EVT: {
-      const struct ble_add_whitelist_cmpl_evt_param *p =
-          &ep->add_whitelist_cmpl;
+    case ESP_GAP_BLE_UPDATE_WHITELIST_COMPLETE_EVT: {
+      const struct ble_update_whitelist_cmpl_evt_param *p =
+          &ep->update_whitelist_cmpl;
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll,
           ("ADD_WHITELIST_COMPLETE st %d op %d", p->status, p->wl_opration));
