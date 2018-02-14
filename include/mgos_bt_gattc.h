@@ -22,6 +22,7 @@ enum mgos_bt_gattc_event {
   MGOS_BT_GATTC_EVENT_DISCONNECT,       /* struct mgos_bt_gattc_conn */
   MGOS_BT_GATTC_EVENT_DISCOVERY_RESULT, /* struct mgos_bt_gattc_discovery */
   MGOS_BT_GATTC_EVENT_READ,             /* struct mgos_bt_gattc_read */
+  MGOS_BT_GATTC_EVENT_NOTIFY,           /* struct mgos_bt_gattc_read */
 };
 
 struct mgos_bt_gattc_conn {

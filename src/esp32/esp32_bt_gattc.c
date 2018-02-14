@@ -60,8 +60,11 @@ bool mgos_bt_gattc_read(int conn_id, uint16_t handle) {
 
 bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle) {
   if (esp32_bt_is_scanning()) return false;
-  /* TODO(lsm): implement */
-  return false;
+  struct conn *conn = find_by_conn_id(conn_id);
+  if (conn == NULL) return false;
+  esp_err_t err =
+      esp_ble_gattc_register_for_notify(conn->iface, conn->c.addr.addr, handle);
+  return err == ESP_OK;
 }
 
 bool mgos_bt_gattc_write(int conn_id, uint16_t handle, const void *data,
@@ -225,6 +228,14 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
           ("%s cid %u addr %s handle %u val_len %d",
            (p->is_notify ? "NOTIFY" : "INDICATE"), p->conn_id,
            esp32_bt_addr_to_str(p->remote_bda, buf), p->handle, p->value_len));
+      struct conn *conn = find_by_conn_id(p->conn_id);
+      if (conn == NULL) break;
+      struct mgos_bt_gattc_read res = {
+          .addr = conn->c.addr,
+          .handle = p->handle,
+          .data = mg_strdup(mg_mk_str_n((char *) p->value, p->value_len))};
+      mgos_event_trigger_schedule(MGOS_BT_GATTC_EVENT_NOTIFY, &res,
+                                  sizeof(res));
       break;
     }
     case ESP_GATTC_PREP_WRITE_EVT: {

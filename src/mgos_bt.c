@@ -131,7 +131,8 @@ static void trigger_cb(void *arg) {
   struct mgos_event_info *ei = arg;
   void *ev_data = ei + 1;
   mgos_event_trigger(ei->ev, ev_data);
-  if (ei->ev == MGOS_BT_GATTC_EVENT_READ) {
+  if (ei->ev == MGOS_BT_GATTC_EVENT_READ ||
+      ei->ev == MGOS_BT_GATTC_EVENT_NOTIFY) {
     struct mgos_bt_gattc_read *p = ev_data;
     free((void *) p->data.p);
   }
