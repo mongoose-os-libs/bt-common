@@ -524,7 +524,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll, ("ADD_CHAR_DESCR st %d ah %u svch %u uuid %s", p->status,
                p->attr_handle, p->service_handle,
-               esp32_bt_uuid_to_str(&p->char_uuid, buf)));
+               esp32_bt_uuid_to_str(&p->descr_uuid, buf)));
       break;
     }
     case ESP_GATTS_DELETE_EVT: {
