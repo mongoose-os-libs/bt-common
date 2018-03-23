@@ -28,8 +28,9 @@ const uint16_t primary_service_uuid;
 const uint16_t char_decl_uuid;
 const uint16_t char_client_config_uuid;
 const uint8_t char_prop_read;
-const uint8_t char_prop_read_write;
 const uint8_t char_prop_read_notify;
+const uint8_t char_prop_read_write;
+const uint8_t char_prop_read_write_notify;
 const uint8_t char_prop_write;
 
 const char *esp32_bt_addr_to_str(const esp_bd_addr_t addr, char *out);
