@@ -17,7 +17,7 @@
 
 #include "common/str_util.h"
 
-#include "frozen/frozen.h"
+#include "frozen.h"
 
 #include "mgos_bt_gap.h"
 #include "mgos_sys_config.h"
