@@ -52,6 +52,9 @@ enum mgos_bt_gap_eir_type {
 struct mg_str mgos_bt_gap_parse_adv_data(const uint8_t *data,
                                          enum mgos_bt_gap_eir_type);
 
+/* Either LONG or, if not provided, SHORT_NAME. */
+struct mg_str mgos_bt_gap_parse_name(const uint8_t *data);
+
 struct mgos_bt_gap_scan_result {
   uint8_t adv_data[MGOS_BT_GAP_ADV_DATA_LEN];
   uint8_t scan_rsp[MGOS_BT_GAP_ADV_DATA_LEN];

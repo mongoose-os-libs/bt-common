@@ -130,19 +130,19 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
     case ESP_GATTC_OPEN_EVT: {
       const struct gattc_open_evt_param *p = &ep->open;
       enum cs_log_level ll = ll_from_status(p->status);
-      LOG(ll, ("OPEN if %d st %#hx conn %d %s", iface, p->status, p->conn_id,
-               esp32_bt_addr_to_str(p->remote_bda, buf)));
+      LOG(ll, ("OPEN if %d cid %u addr %s st %#hx mtu %d", iface, p->conn_id,
+               esp32_bt_addr_to_str(p->remote_bda, buf), p->status, p->mtu));
       if (p->status == ESP_GATT_OK) {
         struct conn *conn = find_by_addr(p->remote_bda);
         if (conn == NULL) {
           conn = calloc(1, sizeof(*conn));
+          conn->iface = iface;
           memcpy(conn->c.addr.addr, p->remote_bda, sizeof(conn->c.addr.addr));
+          esp_ble_gattc_send_mtu_req(iface, p->conn_id);
           SLIST_INSERT_HEAD(&s_conns, conn, next);
         }
         conn->c.conn_id = p->conn_id;
         conn->c.mtu = p->mtu;
-        mgos_event_trigger_schedule(MGOS_BT_GATTC_EVENT_CONNECT, &conn->c,
-                                    sizeof(conn->c));
       } else {
         esp_ble_gattc_close(iface, p->conn_id);
         disconnect(p->conn_id, p->remote_bda);
@@ -281,6 +281,12 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
       const struct gattc_cfg_mtu_evt_param *p = &ep->cfg_mtu;
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll, ("CFG_MTU st %d cid %u mtu %d", p->status, p->conn_id, p->mtu));
+      struct conn *conn = find_by_conn_id(p->conn_id);
+      if (conn != NULL) {
+        conn->c.mtu = p->mtu;
+        mgos_event_trigger_schedule(MGOS_BT_GATTC_EVENT_CONNECT, &conn->c,
+                                    sizeof(conn->c));
+      }
       break;
     }
     case ESP_GATTC_ADV_DATA_EVT: {

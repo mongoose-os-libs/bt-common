@@ -201,10 +201,12 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
       struct mgos_bt_gap_scan_result data = {.rssi = p->rssi};
       if (p->search_evt == ESP_GAP_SEARCH_INQ_RES_EVT) {
         char buf[BT_ADDR_STR_LEN], hexbuf[MGOS_BT_GAP_ADV_DATA_LEN * 2 + 1];
+        const struct mg_str name = mgos_bt_gap_parse_name(p->ble_adv);
         cs_to_hex(hexbuf, p->ble_adv, MGOS_BT_GAP_ADV_DATA_LEN);
-        LOG(LL_DEBUG, ("SCAN_RESULT %d %s rssi %d srl %d adl %d [%s]",
-                       p->search_evt, esp32_bt_addr_to_str(p->bda, buf),
-                       p->rssi, p->scan_rsp_len, p->adv_data_len, hexbuf));
+        LOG(LL_DEBUG,
+            ("SCAN_RESULT %d %s [%.*s] rssi %d srl %d adl %d [%s]",
+             p->search_evt, esp32_bt_addr_to_str(p->bda, buf), (int) name.len,
+             name.p, p->rssi, p->scan_rsp_len, p->adv_data_len, hexbuf));
         memcpy(data.addr.addr, p->bda, sizeof(data.addr.addr));
         memcpy(data.adv_data, p->ble_adv, sizeof(data.adv_data));
         memcpy(data.scan_rsp, p->ble_adv + sizeof(data.adv_data),

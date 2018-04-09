@@ -12,3 +12,11 @@ struct mg_str mgos_bt_gap_parse_adv_data(const uint8_t *data,
   }
   return res;
 }
+
+struct mg_str mgos_bt_gap_parse_name(const uint8_t *data) {
+  struct mg_str s = mgos_bt_gap_parse_adv_data(data, MGOS_BT_GAP_EIR_FULL_NAME);
+  if (s.len == 0) {
+    s = mgos_bt_gap_parse_adv_data(data, MGOS_BT_GAP_EIR_SHORT_NAME);
+  }
+  return s;
+}
