@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
+#include <stdio.h>
+#include <string.h>
+
 #include "mgos_bt.h"
 #include "mgos_bt_gattc.h"
 #include "mgos_system.h"
-
-#include <stdio.h>
 
 const char *mgos_bt_addr_to_str(const struct mgos_bt_addr *addr, char *out) {
   sprintf(out, "%02x:%02x:%02x:%02x:%02x:%02x", addr->addr[0], addr->addr[1],
