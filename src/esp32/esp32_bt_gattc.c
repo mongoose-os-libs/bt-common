@@ -90,8 +90,10 @@ bool mgos_bt_gattc_connect(const struct mgos_bt_addr *addr) {
   char buf[MGOS_BT_ADDR_STR_LEN];
   uint8_t *a = (uint8_t *) addr->addr;
   if (esp32_bt_is_scanning()) return false;
-  esp_err_t err = esp_ble_gattc_open(s_gattc_if, a, true);
-  LOG(LL_DEBUG, ("CONNECT %s: %d", esp32_bt_addr_to_str(a, buf), err));
+  esp_err_t err = esp_ble_gattc_open(s_gattc_if, a, addr->type - 1, true);
+  LOG(LL_DEBUG,
+      ("CONNECT %s: %d",
+       mgos_bt_addr_to_str(addr, MGOS_BT_ADDR_STRINGIFY_TYPE, buf), err));
   return err == ESP_OK;
 }
 
@@ -182,10 +184,10 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
         di.chr = *(struct mgos_bt_uuid *) &el.uuid;
         di.handle = el.char_handle;
         di.prop = el.properties;
-        LOG(LL_DEBUG,
-            ("  discovery: %s %s %s %hhx", mgos_bt_addr_to_str(&di.addr, buf1),
-             mgos_bt_uuid_to_str(&di.svc, buf2),
-             mgos_bt_uuid_to_str(&di.chr, buf3), di.prop));
+        LOG(LL_DEBUG, ("  discovery: %s %s %s %hhx",
+                       mgos_bt_addr_to_str(&di.addr, 1, buf1),
+                       mgos_bt_uuid_to_str(&di.svc, buf2),
+                       mgos_bt_uuid_to_str(&di.chr, buf3), di.prop));
         mgos_event_trigger_schedule(MGOS_BT_GATTC_EVENT_DISCOVERY_RESULT, &di,
                                     sizeof(di));
         count = 1;
@@ -373,7 +375,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
                      esp32_bt_addr_to_str(p->remote_bda, buf)));
       break;
     }
-    case ESP_GATTC_READ_MUTIPLE_EVT: {
+    case ESP_GATTC_READ_MULTIPLE_EVT: {
       const struct gattc_read_char_evt_param *p = &ep->read;
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll, ("READ_MUTIPLE st %d cid %u h %u val_len %u", p->status,

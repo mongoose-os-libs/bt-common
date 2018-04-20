@@ -28,8 +28,17 @@
 extern "C" {
 #endif
 
+enum mgos_bt_addr_type {
+  MGOS_BT_ADDR_TYPE_NONE = 0,
+  MGOS_BT_ADDR_TYPE_PUBLIC = 1,
+  MGOS_BT_ADDR_TYPE_RANDOM_STATIC = 2,
+  MGOS_BT_ADDR_TYPE_RANDOM_NON_RESOLVABLE = 3,
+  MGOS_BT_ADDR_TYPE_RANDOM_RESOLVABLE = 4,
+};
+
 struct mgos_bt_addr {
   uint8_t addr[6];
+  enum mgos_bt_addr_type type;
 };
 
 /* Binary-equivalent to the ESP32 esp_bt_uuid_t */
@@ -43,13 +52,15 @@ struct mgos_bt_uuid {
 } __attribute__((packed));
 
 /* Each byte is transformed into 3 bytes: "XX:", and last byte into "XX\0" */
-#define MGOS_BT_ADDR_STR_LEN (sizeof(struct mgos_bt_addr) * 3)
+#define MGOS_BT_ADDR_STR_LEN (sizeof(struct mgos_bt_addr) * 3 + 2 /* type */)
 #define MGOS_BT_UUID_STR_LEN (sizeof(struct mgos_bt_uuid) * 3)
 #define MGOS_BT_DEV_NAME_LEN 32
 
 #define BT_ADDR_STR_LEN MGOS_BT_ADDR_STR_LEN
 
-const char *mgos_bt_addr_to_str(const struct mgos_bt_addr *addr, char *out);
+#define MGOS_BT_ADDR_STRINGIFY_TYPE 1
+const char *mgos_bt_addr_to_str(const struct mgos_bt_addr *addr, uint32_t flags,
+                                char *out);
 bool mgos_bt_addr_from_str(const struct mg_str addr_str,
                            struct mgos_bt_addr *addr);
 int mgos_bt_addr_cmp(const struct mgos_bt_addr *a,

@@ -203,14 +203,17 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
         char buf[BT_ADDR_STR_LEN], hexbuf[MGOS_BT_GAP_ADV_DATA_LEN * 2 + 1];
         const struct mg_str name = mgos_bt_gap_parse_name(p->ble_adv);
         cs_to_hex(hexbuf, p->ble_adv, MGOS_BT_GAP_ADV_DATA_LEN);
-        LOG(LL_DEBUG,
-            ("SCAN_RESULT %d %s [%.*s] rssi %d srl %d adl %d [%s]",
-             p->search_evt, esp32_bt_addr_to_str(p->bda, buf), (int) name.len,
-             name.p, p->rssi, p->scan_rsp_len, p->adv_data_len, hexbuf));
         memcpy(data.addr.addr, p->bda, sizeof(data.addr.addr));
+        data.addr.type = (enum mgos_bt_addr_type)(p->ble_addr_type + 1);
         memcpy(data.adv_data, p->ble_adv, sizeof(data.adv_data));
         memcpy(data.scan_rsp, p->ble_adv + sizeof(data.adv_data),
                sizeof(data.scan_rsp));
+        LOG(LL_DEBUG,
+            ("SCAN_RESULT %d %s [%.*s] dt %d at %d et %d rssi %d "
+             "srl %d adl %d [%s]",
+             p->search_evt, esp32_bt_addr_to_str(p->bda, buf), (int) name.len,
+             name.p, p->dev_type, p->ble_addr_type, p->ble_evt_type, p->rssi,
+             p->scan_rsp_len, p->adv_data_len, hexbuf));
         mgos_event_trigger_schedule(MGOS_BT_GAP_EVENT_SCAN_RESULT, &data,
                                     sizeof(data));
       } else {

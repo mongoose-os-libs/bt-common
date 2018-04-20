@@ -36,7 +36,7 @@
 #include "mgos_sys_config.h"
 
 const char *esp32_bt_addr_to_str(const esp_bd_addr_t addr, char *out) {
-  return mgos_bt_addr_to_str((const struct mgos_bt_addr *) &addr[0], out);
+  return mgos_bt_addr_to_str((const struct mgos_bt_addr *) &addr[0], 0, out);
 }
 
 bool esp32_bt_addr_from_str(const struct mg_str addr_str, esp_bd_addr_t addr) {

@@ -22,17 +22,24 @@
 #include "mgos_bt_gattc.h"
 #include "mgos_system.h"
 
-const char *mgos_bt_addr_to_str(const struct mgos_bt_addr *addr, char *out) {
+const char *mgos_bt_addr_to_str(const struct mgos_bt_addr *addr, uint32_t flags,
+                                char *out) {
   sprintf(out, "%02x:%02x:%02x:%02x:%02x:%02x", addr->addr[0], addr->addr[1],
           addr->addr[2], addr->addr[3], addr->addr[4], addr->addr[5]);
+  if (flags & MGOS_BT_ADDR_STRINGIFY_TYPE) {
+    sprintf(out + 17, ",%d", (addr->type & 7));
+  }
   return out;
 }
 
 bool mgos_bt_addr_from_str(const struct mg_str addr_str,
                            struct mgos_bt_addr *addr) {
   uint8_t *p = addr->addr;
-  return sscanf(addr_str.p, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", p,
-                p + 1, p + 2, p + 3, p + 4, p + 5) == 6;
+  int at = 0;
+  int n = sscanf(addr_str.p, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx,%d", p,
+                 p + 1, p + 2, p + 3, p + 4, p + 5, &at);
+  addr->type = (enum mgos_bt_addr_type) at;
+  return n == 6 || n == 7;
 }
 
 int mgos_bt_addr_cmp(const struct mgos_bt_addr *a,
