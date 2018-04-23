@@ -26,6 +26,9 @@ config_schema:
   - ["bt.gatts", "o", {title: "GATTS settings"}]
   - ["bt.gatts.min_sec_level", "i", 0, {title: "0 - no auth required, 1 - encryption reqd, 2 - encryption + MITM reqd"}]
   - ["bt.gatts.require_pairing", "b", false, {title: "Require device to be paired before accessing services"}]
+  - ["bt.gap", "o", {title: "GAP settings"}]
+  - ["bt.gap.include_name", "b", true, {title: "Include name in advertisements"}]
+  - ["bt.gap.service_uuid", "s", "", {title: "Service UUID to advertise"}]
 
 tags:
   - bt
