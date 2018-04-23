@@ -43,6 +43,7 @@ static bool s_advertising = false;
 static bool s_pairing_enable = false;
 static bool s_scanning = false;
 static int s_scan_duration_sec = 3;
+static uint8_t s_service_uuid[16] = {0};
 
 static esp_ble_adv_data_t s_adv_data = {
     .set_scan_rsp = false,
@@ -76,6 +77,23 @@ bool esp32_bt_is_scanning(void) {
 static bool start_advertising(void) {
   if (s_advertising) return true;
   if (!s_adv_enable || esp32_bt_is_scanning()) return false;
+
+  s_adv_data.include_name = mgos_sys_config_get_bt_gap_include_name();
+
+  struct mg_str service_uuid_str =
+      mg_mk_str(mgos_sys_config_get_bt_gap_service_uuid());
+  struct mgos_bt_uuid service_uuid;
+  if (service_uuid_str.p &&
+      mgos_bt_uuid_from_str(service_uuid_str, &service_uuid) &&
+      service_uuid.len == sizeof(service_uuid.uuid.uuid128)) {
+    memcpy(s_service_uuid, service_uuid.uuid.uuid128, service_uuid.len);
+    s_adv_data.service_uuid_len = service_uuid.len;
+    s_adv_data.p_service_uuid = s_service_uuid;
+  } else {
+    s_adv_data.service_uuid_len = 0;
+    s_adv_data.p_service_uuid = NULL;
+  }
+
   const char *dev_name = mgos_sys_config_get_bt_dev_name();
   if (dev_name == NULL) dev_name = mgos_sys_config_get_device_id();
   if (dev_name == NULL) {
