@@ -20,6 +20,10 @@ settings:
     "min_sec_level": 0,       // Minimum security level for all attributes of all services.
                               // 0 - no auth required, 1 - encryption reqd, 2 - encryption + MITM reqd
     "require_pairing": false  // Require taht device is paired before accessing services
+  },
+  "gap": {
+    "include_name": true,     // Include dev_name in advertisements
+    "service_uuid": ""        // Advertise this service uuid
   }
 }
 ```
