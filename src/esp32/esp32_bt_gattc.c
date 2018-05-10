@@ -21,7 +21,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "bta_api.h"
 #include "esp_bt.h"
 #include "esp_bt_defs.h"
 #include "esp_gap_ble_api.h"
@@ -387,6 +386,18 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll, ("QUEUE_FULL st %d cid %u is_full %d", p->status, p->conn_id,
                p->is_full));
+      break;
+    }
+    case ESP_GATTC_SET_ASSOC_EVT: {
+      const struct gattc_set_assoc_addr_cmp_evt_param *p = &ep->set_assoc_cmp;
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("SET_ASSOC st %d", p->status));
+      break;
+    }
+    case ESP_GATTC_GET_ADDR_LIST_EVT: {
+      const struct gattc_get_addr_list_evt_param *p = &ep->get_addr_list;
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("GET_ADDR_LIST st %d num_addr %u", p->status, p->num_addr));
       break;
     }
   }
