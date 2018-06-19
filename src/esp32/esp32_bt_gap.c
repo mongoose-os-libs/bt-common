@@ -23,6 +23,7 @@
 
 #include "esp_bt.h"
 #include "esp_bt_defs.h"
+#include "esp_bt_device.h"
 #include "esp_gap_ble_api.h"
 #include "nvs.h"
 
@@ -74,14 +75,23 @@ bool esp32_bt_is_scanning(void) {
 
 static bool start_advertising(void) {
   if (s_advertising) return true;
-  if (!s_adv_enable || esp32_bt_is_scanning()) return false;
+  if (!s_adv_enable) return false;
   const char *dev_name = mgos_sys_config_get_bt_dev_name();
   if (dev_name == NULL) dev_name = mgos_sys_config_get_device_id();
   if (dev_name == NULL) {
     LOG(LL_ERROR, ("bt.dev_name or device.id must be set"));
     return false;
   }
-  LOG(LL_INFO, ("BT device name %s", dev_name));
+  esp_bd_addr_t local_addr;
+  uint8_t addr_type;
+  esp_ble_gap_get_local_used_addr(local_addr, &addr_type);
+  struct mgos_bt_addr la = {
+      .type = (enum mgos_bt_addr_type)(addr_type + 1),
+  };
+  memcpy(la.addr, local_addr, 6);
+  char addr[BT_ADDR_STR_LEN];
+  LOG(LL_INFO, ("BT device name %s, addr %s", dev_name,
+                mgos_bt_addr_to_str(&la, MGOS_BT_ADDR_STRINGIFY_TYPE, addr)));
   if (esp_ble_gap_set_device_name(dev_name) != ESP_OK) {
     return false;
   }
@@ -157,7 +167,9 @@ void mgos_bt_ble_remove_all_paired_devices(void) {
 bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *opts) {
   esp_ble_scan_params_t params = {
       .scan_type = BLE_SCAN_TYPE_PASSIVE,
-      .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
+      .own_addr_type =
+          (mgos_sys_config_get_bt_random_address() ? BLE_ADDR_TYPE_RANDOM
+                                                   : BLE_ADDR_TYPE_PUBLIC),
       .scan_filter_policy = BLE_SCAN_FILTER_ALLOW_ALL,
       .scan_interval = MGOS_BT_BLE_DEFAULT_SCAN_INTERVAL_MS / 0.625,
       .scan_window = MGOS_BT_BLE_DEFAULT_SCAN_WINDOW_MS / 0.625,
@@ -226,8 +238,6 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
       LOG(LL_DEBUG, ("ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE st %d", p->status));
       if (p->status != ESP_BT_STATUS_SUCCESS) {
         s_scanning = false;
-      } else if (!stop_advertising()) {
-        s_scanning = false;
       } else if (esp_ble_gap_start_scanning(s_scan_duration_sec) != ESP_OK) {
         s_scanning = false;
       }
@@ -236,7 +246,7 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT: {
       const struct ble_adv_data_cmpl_evt_param *p = &ep->adv_data_cmpl;
       LOG(LL_DEBUG, ("ADV_DATA_SET_COMPLETE st %d", p->status));
-      if (s_adv_enable && !esp32_bt_is_scanning()) {
+      if (s_adv_enable) {
         esp_ble_gap_start_advertising(&s_adv_params);
       }
       break;
