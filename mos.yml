@@ -32,6 +32,7 @@ tags:
   - bluetooth
   - c
   - net
+  - docs:net:BLE
 
 manifest_version: 2017-09-29
 
