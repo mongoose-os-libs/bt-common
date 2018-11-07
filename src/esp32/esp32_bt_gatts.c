@@ -712,6 +712,12 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
                p->status));
       break;
     }
+    case ESP_GATTS_SEND_SERVICE_CHANGE_EVT: {
+      const struct gatts_send_service_change_evt_param *p = &ep->service_change;
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("SET_ATTR_VAL st %d", p->status));
+      break;
+    }
   }
 }
 
