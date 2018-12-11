@@ -34,6 +34,7 @@
 #include "mgos_hal.h"
 #include "mgos_sys_config.h"
 
+#include "esp32_bt_ble.h"
 #include "esp32_bt_internal.h"
 
 #ifndef MGOS_BT_GATTS_MAX_PREPARED_WRITE_LEN
@@ -565,7 +566,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
                     esp32_bt_addr_to_str(p->remote_bda, buf)));
       /* Connect disables advertising. Resume, if it's enabled. */
       esp32_bt_set_is_advertising(false);
-      mgos_bt_gap_set_adv_enable(mgos_bt_gap_get_adv_enable());
+      mgos_bt_ble_set_adv_enable(mgos_bt_ble_get_adv_enable());
       bool disconnect = false;
       esp_ble_sec_act_t sec = 0;
       switch (mgos_sys_config_get_bt_gatts_min_sec_level()) {
@@ -583,7 +584,7 @@ static void esp32_bt_gatts_ev(esp_gatts_cb_event_t ev, esp_gatt_if_t gatts_if,
         int max_devices = mgos_sys_config_get_bt_max_paired_devices();
         if (is_paired(p->remote_bda)) {
           LOG(LL_INFO, ("%s: Already paired", buf));
-        } else if (!mgos_bt_gap_get_pairing_enable()) {
+        } else if (!mgos_bt_ble_get_pairing_enable()) {
           LOG(LL_ERROR, ("%s: pairing required but is not allowed", buf));
           disconnect = true;
         } else if (max_devices >= 0 &&

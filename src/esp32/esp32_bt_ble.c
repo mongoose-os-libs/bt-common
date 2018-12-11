@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include "esp32_bt.h"
+#include "esp32_bt_ble.h"
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -31,7 +31,7 @@
 
 #include "frozen.h"
 
-#include "mgos_bt_gap.h"
+#include "mgos_bt_ble.h"
 #include "mgos_sys_config.h"
 #include "mgos_system.h"
 
@@ -112,11 +112,11 @@ void mgos_bt_ble_set_scan_rsp_data(const struct mg_str scan_rsp_data) {
                                        scan_rsp_data.len);
 }
 
-bool mgos_bt_gap_get_adv_enable(void) {
+bool mgos_bt_ble_get_adv_enable(void) {
   return s_adv_enable;
 }
 
-bool mgos_bt_gap_set_adv_enable(bool adv_enable) {
+bool mgos_bt_ble_set_adv_enable(bool adv_enable) {
   s_adv_enable = adv_enable;
   return (s_adv_enable ? start_advertising() : stop_advertising());
 }
@@ -125,11 +125,11 @@ void esp32_bt_set_is_advertising(bool is_advertising) {
   s_advertising = is_advertising;
 }
 
-bool mgos_bt_gap_get_pairing_enable(void) {
+bool mgos_bt_ble_get_pairing_enable(void) {
   return s_pairing_enable;
 }
 
-bool mgos_bt_gap_set_pairing_enable(bool pairing_enable) {
+bool mgos_bt_ble_set_pairing_enable(bool pairing_enable) {
   esp_ble_auth_req_t auth_req =
       (pairing_enable ? ESP_LE_AUTH_BOND : ESP_LE_AUTH_NO_BOND);
   if (esp_ble_gap_set_security_param(ESP_BLE_SM_AUTHEN_REQ_MODE, &auth_req,
@@ -164,9 +164,10 @@ void mgos_bt_ble_remove_all_paired_devices(void) {
   free(list);
 }
 
-bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *opts) {
+bool mgos_bt_ble_scan(const struct mgos_bt_ble_scan_opts *opts) {
   esp_ble_scan_params_t params = {
-      .scan_type = BLE_SCAN_TYPE_PASSIVE,
+      .scan_type =
+          (opts->active ? BLE_SCAN_TYPE_ACTIVE : BLE_SCAN_TYPE_PASSIVE),
       .own_addr_type =
           (mgos_sys_config_get_bt_random_address() ? BLE_ADDR_TYPE_RANDOM
                                                    : BLE_ADDR_TYPE_PUBLIC),
@@ -174,9 +175,7 @@ bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *opts) {
       .scan_interval = MGOS_BT_BLE_DEFAULT_SCAN_INTERVAL_MS / 0.625,
       .scan_window = MGOS_BT_BLE_DEFAULT_SCAN_WINDOW_MS / 0.625,
   };
-  if (opts != NULL) {
-    s_scan_duration_sec = opts->duration_ms / 1000 + 1;
-  }
+  s_scan_duration_sec = opts->duration_ms / 1000 + 1;
   if (esp_ble_gap_set_scan_params(&params) == ESP_OK) {
     LOG(LL_DEBUG,
         ("Starting scan (%s, %d/%d)",
@@ -204,32 +203,49 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
       const struct ble_scan_stop_cmpl_evt_param *p = &ep->scan_stop_cmpl;
       LOG(LL_DEBUG, ("ESP_GAP_BLE_SCAN_STOP_COMPLETE st %d", p->status));
       s_scanning = false;
-      mgos_event_trigger_schedule(MGOS_BT_GAP_EVENT_SCAN_STOP, NULL, 0);
+      LOG(LL_DEBUG, ("Scan aborted"));
+      mgos_event_trigger_schedule(MGOS_BT_BLE_EVENT_SCAN_STOP, NULL, 0);
       break;
     }
     case ESP_GAP_BLE_SCAN_RESULT_EVT: {
       struct ble_scan_result_evt_param *p = &ep->scan_rst;
-      struct mgos_bt_gap_scan_result data = {.rssi = p->rssi};
-      if (p->search_evt == ESP_GAP_SEARCH_INQ_RES_EVT) {
-        char buf[BT_ADDR_STR_LEN], hexbuf[MGOS_BT_GAP_ADV_DATA_LEN * 2 + 1];
-        const struct mg_str name = mgos_bt_gap_parse_name(p->ble_adv);
-        cs_to_hex(hexbuf, p->ble_adv, MGOS_BT_GAP_ADV_DATA_LEN);
-        memcpy(data.addr.addr, p->bda, sizeof(data.addr.addr));
-        data.addr.type = (enum mgos_bt_addr_type)(p->ble_addr_type + 1);
-        memcpy(data.adv_data, p->ble_adv, sizeof(data.adv_data));
-        memcpy(data.scan_rsp, p->ble_adv + sizeof(data.adv_data),
-               sizeof(data.scan_rsp));
-        LOG(LL_DEBUG,
-            ("SCAN_RESULT %d %s [%.*s] dt %d at %d et %d rssi %d "
-             "srl %d adl %d [%s]",
-             p->search_evt, esp32_bt_addr_to_str(p->bda, buf), (int) name.len,
-             name.p, p->dev_type, p->ble_addr_type, p->ble_evt_type, p->rssi,
-             p->scan_rsp_len, p->adv_data_len, hexbuf));
-        mgos_event_trigger_schedule(MGOS_BT_GAP_EVENT_SCAN_RESULT, &data,
-                                    sizeof(data));
-      } else {
-        LOG(LL_DEBUG, ("SCAN_RESULT search ev %d", p->search_evt));
-        esp_ble_gap_stop_scanning();
+      switch (p->search_evt) {
+        case ESP_GAP_SEARCH_INQ_RES_EVT: {
+          char buf[BT_ADDR_STR_LEN];
+          char ad_hex[MGOS_BT_BLE_ADV_DATA_MAX_LEN * 2 + 1];
+          char sr_hex[MGOS_BT_BLE_SCAN_RSP_MAX_LEN * 2 + 1];
+          struct mgos_bt_ble_scan_result arg = { .rssi = p->rssi };
+          memcpy(arg.addr.addr, p->bda, sizeof(arg.addr.addr));
+          arg.addr.type = (enum mgos_bt_addr_type)(p->ble_addr_type + 1);
+          if (p->scan_rsp_len > 0) {
+            arg.adv_data = mg_strdup(mg_mk_str_n((char *) p->ble_adv, ESP_BLE_ADV_DATA_LEN_MAX + p->scan_rsp_len));
+          } else {
+            arg.adv_data = mg_strdup(mg_mk_str_n((char *) p->ble_adv, p->adv_data_len));
+          }
+          if (arg.adv_data.p != NULL) {
+            arg.adv_data.len = p->adv_data_len;
+            arg.scan_rsp = mg_mk_str_n(arg.adv_data.p + ESP_BLE_ADV_DATA_LEN_MAX, p->scan_rsp_len);
+          }
+          cs_to_hex(ad_hex, (void *) arg.adv_data.p, arg.adv_data.len);
+          cs_to_hex(sr_hex, (void *) arg.scan_rsp.p, arg.scan_rsp.len);
+          const struct mg_str name = mgos_bt_ble_parse_name(arg.adv_data);
+          LOG(LL_DEBUG, ("SCAN_RESULT %d %s [%.*s] dt %d at %d et %d rssi %d "
+                         "adl %d [%s] srl %d [%s]",
+                         p->search_evt, esp32_bt_addr_to_str(p->bda, buf),
+                         (int) name.len, name.p, p->dev_type, p->ble_addr_type,
+                         p->ble_evt_type, p->rssi, (int) arg.adv_data.len,
+                         ad_hex, (int) arg.scan_rsp.len, sr_hex));
+          mgos_event_trigger_schedule(MGOS_BT_BLE_EVENT_SCAN_RESULT, &arg, sizeof(arg));
+          break;
+        }
+        case ESP_GAP_SEARCH_INQ_CMPL_EVT:
+        case ESP_GAP_SEARCH_SEARCH_CANCEL_CMPL_EVT: {
+          s_scanning = false;
+          LOG(LL_DEBUG, ("Scan finished"));
+          mgos_event_trigger_schedule(MGOS_BT_BLE_EVENT_SCAN_STOP, NULL, 0);
+          break;
+        }
+        default: { LOG(LL_DEBUG, ("SCAN_RESULT search ev %d", p->search_evt)); }
       }
       break;
     }
@@ -417,7 +433,7 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
   }
 }
 
-bool esp32_bt_gap_init(void) {
+bool esp32_bt_ble_init(void) {
   if (esp_ble_gap_register_callback(esp32_gap_ev_handler) != ESP_OK) {
     return false;
   }
@@ -440,7 +456,7 @@ bool esp32_bt_gap_init(void) {
     }
   }
 
-  mgos_bt_gap_set_pairing_enable(mgos_sys_config_get_bt_allow_pairing());
+  mgos_bt_ble_set_pairing_enable(mgos_sys_config_get_bt_allow_pairing());
 
   esp_ble_io_cap_t io_cap = ESP_IO_CAP_NONE;
   esp_ble_gap_set_security_param(ESP_BLE_SM_IOCAP_MODE, &io_cap,
@@ -457,5 +473,5 @@ bool esp32_bt_gap_init(void) {
     s_adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
   }
 
-  return mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
+  return mgos_bt_ble_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
 }

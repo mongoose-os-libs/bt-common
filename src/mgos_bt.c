@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "mgos_bt.h"
+#include "mgos_bt_ble.h"
 #include "mgos_bt_gattc.h"
 #include "mgos_system.h"
 
@@ -155,6 +156,9 @@ static void trigger_cb(void *arg) {
       ei->ev == MGOS_BT_GATTC_EVENT_NOTIFY) {
     struct mgos_bt_gattc_read *p = ev_data;
     free((void *) p->data.p);
+  } else if (ei->ev == MGOS_BT_BLE_EVENT_SCAN_RESULT) {
+    struct mgos_bt_ble_scan_result *p = ev_data;
+    free((void *) p->adv_data.p);
   }
   free(ei);
 }
@@ -163,5 +167,7 @@ void mgos_event_trigger_schedule(int ev, const void *ev_data, size_t data_len) {
   struct mgos_event_info *ei = malloc(sizeof(*ei) + data_len);
   ei->ev = ev;
   memcpy(ei + 1, ev_data, data_len);
-  mgos_invoke_cb(trigger_cb, ei, false /* from_isr */);
+  if (!mgos_invoke_cb(trigger_cb, ei, false /* from_isr */)) {
+    free(ei);
+  }
 }

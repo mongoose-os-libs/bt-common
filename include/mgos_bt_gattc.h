@@ -19,7 +19,6 @@
 #define MOS_LIBS_GATTC_H
 
 #include "mgos_bt.h"
-#include "mgos_bt_gap.h"
 #include "mgos_event.h"
 
 #ifdef __cplusplus

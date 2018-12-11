@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-#ifndef MOS_LIBS_BT_GAP_H
-#define MOS_LIBS_BT_GAP_H
+#pragma once
 
 #include "mgos_bt.h"
 #include "mgos_event.h"
@@ -25,47 +24,47 @@
 extern "C" {
 #endif
 
-#define MGOS_BT_GAP_ADV_DATA_LEN 31
+#define MGOS_BT_BLE_ADV_DATA_MAX_LEN 31
+#define MGOS_BT_BLE_SCAN_RSP_MAX_LEN 31
 
-#define MGOS_BT_GAP_EVENT_BASE MGOS_EVENT_BASE('G', 'A', 'P')
+#define MGOS_BT_BLE_EVENT_BASE MGOS_EVENT_BASE('B', 'L', 'E')
 
-enum mgos_bt_gap_event {
-  MGOS_BT_GAP_EVENT_SCAN_RESULT =
-      MGOS_BT_GAP_EVENT_BASE,  /* mgos_gap_scan_result */
-  MGOS_BT_GAP_EVENT_SCAN_STOP, /* NULL */
+enum mgos_bt_ble_event {
+  MGOS_BT_BLE_EVENT_SCAN_RESULT =
+      MGOS_BT_BLE_EVENT_BASE,  /* mgos_gap_scan_result */
+  MGOS_BT_BLE_EVENT_SCAN_STOP, /* NULL */
 };
 
-struct mgos_bt_gap_scan_opts {
+struct mgos_bt_ble_scan_opts {
   int duration_ms;
+  bool active;
 };
 
 // https://www.bluetooth.com/specifications/assigned-numbers/generic-access-profile
-enum mgos_bt_gap_eir_type {
-  MGOS_BT_GAP_EIR_FLAGS = 0x1,
-  MGOS_BT_GAP_EIR_SHORT_NAME = 0x8,
-  MGOS_BT_GAP_EIR_FULL_NAME = 0x9,
-  MGOS_BT_GAP_EIR_DEVICE_ID = 0x10,
-  MGOS_BT_GAP_EIR_URL = 0x24,
-  MGOS_BT_GAP_EIR_MANUFACTURER_SPECIFIC_DATA = 0xff,
+enum mgos_bt_ble_eir_type {
+  MGOS_BT_BLE_EIR_FLAGS = 0x1,
+  MGOS_BT_BLE_EIR_SHORT_NAME = 0x8,
+  MGOS_BT_BLE_EIR_FULL_NAME = 0x9,
+  MGOS_BT_BLE_EIR_DEVICE_ID = 0x10,
+  MGOS_BT_BLE_EIR_URL = 0x24,
+  MGOS_BT_BLE_EIR_MANUFACTURER_SPECIFIC_DATA = 0xff,
 };
 
-struct mg_str mgos_bt_gap_parse_adv_data(const uint8_t *data,
-                                         enum mgos_bt_gap_eir_type);
+struct mg_str mgos_bt_ble_parse_adv_data(const struct mg_str adv_data,
+                                         enum mgos_bt_ble_eir_type);
 
 /* Either LONG or, if not provided, SHORT_NAME. */
-struct mg_str mgos_bt_gap_parse_name(const uint8_t *data);
+struct mg_str mgos_bt_ble_parse_name(const struct mg_str adv_data);
 
-struct mgos_bt_gap_scan_result {
-  uint8_t adv_data[MGOS_BT_GAP_ADV_DATA_LEN];
-  uint8_t scan_rsp[MGOS_BT_GAP_ADV_DATA_LEN];
+struct mgos_bt_ble_scan_result {
   struct mgos_bt_addr addr; /* MAC address. Can change randomly. */
+  struct mg_str adv_data;   /* Advertisement data. */
+  struct mg_str scan_rsp;   /* Scan response (for active scan). */
   int rssi;                 /* Signal strength indicator. */
 };
 
-bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *);
+bool mgos_bt_ble_scan(const struct mgos_bt_ble_scan_opts *);
 
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* MOS_LIBS_GAP_H */

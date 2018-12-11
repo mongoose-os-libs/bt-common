@@ -16,6 +16,7 @@
  */
 
 #include "esp32_bt.h"
+#include "esp32_bt_ble.h"
 #include "esp32_bt_internal.h"
 
 #include <stdbool.h>
@@ -139,7 +140,7 @@ bool mgos_bt_common_init(void) {
     goto out;
   }
 
-  if (!esp32_bt_gap_init()) {
+  if (!esp32_bt_ble_init()) {
     LOG(LL_ERROR, ("GAP init failed"));
     ret = false;
     goto out;
@@ -164,7 +165,7 @@ bool mgos_bt_common_init(void) {
   }
 
   LOG(LL_INFO, ("Bluetooth init ok, pairing %s, %d paired devices",
-                (mgos_bt_gap_get_pairing_enable() ? "enabled" : "disabled"),
+                (mgos_bt_ble_get_pairing_enable() ? "enabled" : "disabled"),
                 mgos_bt_ble_get_num_paired_devices()));
   ret = true;
 
