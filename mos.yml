@@ -23,6 +23,7 @@ config_schema:
   - ["bt.allow_pairing", "b", true, {title: "Allow pairing/bonding with other devices"}]
   - ["bt.max_paired_devices", "i", -1, {title: "Max number of paired devices; -1 - no limit"}]
   - ["bt.random_address", "b", true, {title: "Use random BT address"}]
+  - ["bt.gatt_mtu", "i", 500, {title: "Local MTU setting, used when negotiating with clients"}]
   - ["bt.gatts", "o", {title: "GATTS settings"}]
   - ["bt.gatts.min_sec_level", "i", 0, {title: "0 - no auth required, 1 - encryption reqd, 2 - encryption + MITM reqd"}]
   - ["bt.gatts.require_pairing", "b", false, {title: "Require device to be paired before accessing services"}]

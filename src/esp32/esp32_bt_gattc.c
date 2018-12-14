@@ -15,8 +15,6 @@
  * limitations under the License.
  */
 
-#include "esp32_bt_gattc.h"
-
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +31,7 @@
 #include "mgos_bt_gattc.h"
 #include "mgos_system.h"
 
+#include "esp32_bt.h"
 #include "esp32_bt_internal.h"
 
 static esp_gatt_if_t s_gattc_if = 0;

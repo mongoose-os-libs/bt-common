@@ -146,7 +146,7 @@ bool mgos_bt_common_init(void) {
     goto out;
   }
 
-  esp_ble_gatt_set_local_mtu(ESP_GATT_MAX_MTU_SIZE);
+  esp_ble_gatt_set_local_mtu(mgos_sys_config_get_bt_gatt_mtu());
 
   if (!esp32_bt_gattc_init()) {
     LOG(LL_ERROR, ("GATTC init failed"));
@@ -164,7 +164,8 @@ bool mgos_bt_common_init(void) {
     mgos_event_add_group_handler(MGOS_EVENT_GRP_NET, mgos_bt_net_ev, NULL);
   }
 
-  LOG(LL_INFO, ("Bluetooth init ok, pairing %s, %d paired devices",
+  LOG(LL_INFO, ("Bluetooth init ok, MTU %d, pairing %s, %d paired devices",
+                mgos_sys_config_get_bt_gatt_mtu(),
                 (mgos_bt_ble_get_pairing_enable() ? "enabled" : "disabled"),
                 mgos_bt_ble_get_num_paired_devices()));
   ret = true;
