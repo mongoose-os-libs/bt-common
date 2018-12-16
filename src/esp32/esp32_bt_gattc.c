@@ -37,7 +37,7 @@
 static esp_gatt_if_t s_gattc_if = 0;
 
 struct conn {
-  struct mgos_bt_gattc_conn c;
+  struct mgos_bt_gatt_conn c;
   bool connected;
   esp_gatt_if_t iface;
   SLIST_ENTRY(conn) next;
@@ -74,6 +74,11 @@ bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle) {
   if (conn == NULL) return false;
   esp_err_t err =
       esp_ble_gattc_register_for_notify(conn->iface, conn->c.addr.addr, handle);
+  /*
+   * This is not enough, must write to the corresponding descriptor
+   * to actually enable notifications on the remote side.
+   * TODO(lsm): Implement
+   */
   return err == ESP_OK;
 }
 
@@ -101,13 +106,17 @@ bool mgos_bt_gattc_discover(int conn_id) {
   return err == ESP_OK;
 }
 
+bool mgos_bt_gattc_disconnect(int conn_id) {
+  return (esp_ble_gattc_close(s_gattc_if, conn_id) == ESP_GATT_OK);
+}
+
 static void disconnect(int conn_id, const esp_bd_addr_t addr) {
   char buf[MGOS_BT_ADDR_STR_LEN];
   struct conn *conn;
-  struct mgos_bt_gattc_conn c = {.conn_id = conn_id};
+  struct mgos_bt_gatt_conn c = {.conn_id = conn_id};
   memcpy(c.addr.addr, addr, sizeof(c.addr.addr));
   LOG(LL_DEBUG, (" %d %s", conn_id, esp32_bt_addr_to_str(addr, buf)));
-  mgos_event_trigger_schedule(MGOS_BT_GATTC_EVENT_DISCONNECT, &c, sizeof(c));
+  mgos_event_trigger_schedule(MGOS_BT_GATTC_EV_DISCONNECT, &c, sizeof(c));
   while ((conn = find_by_conn_id(conn_id)) != NULL ||
          (conn = find_by_addr(addr)) != NULL) {
     SLIST_REMOVE(&s_conns, conn, conn, next);
@@ -176,17 +185,17 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
                                         i) == ESP_GATT_OK) {
         char buf1[MGOS_BT_DEV_NAME_LEN], buf2[MGOS_BT_UUID_STR_LEN],
             buf3[MGOS_BT_UUID_STR_LEN];
-        struct mgos_bt_gattc_discovery di;
-        if (conn != NULL) di.addr = conn->c.addr;
+        struct mgos_bt_gattc_discovery_result_arg di;
+        if (conn != NULL) di.conn = conn->c;
         di.svc = *(struct mgos_bt_uuid *) &p->srvc_id.uuid;
         di.chr = *(struct mgos_bt_uuid *) &el.uuid;
         di.handle = el.char_handle;
         di.prop = el.properties;
         LOG(LL_DEBUG, ("  discovery: %s %s %s %hhx",
-                       mgos_bt_addr_to_str(&di.addr, 1, buf1),
+                       mgos_bt_addr_to_str(&di.conn.addr, 1, buf1),
                        mgos_bt_uuid_to_str(&di.svc, buf2),
                        mgos_bt_uuid_to_str(&di.chr, buf3), di.prop));
-        mgos_event_trigger_schedule(MGOS_BT_GATTC_EVENT_DISCOVERY_RESULT, &di,
+        mgos_event_trigger_schedule(MGOS_BT_GATTC_EV_DISCOVERY_RESULT, &di,
                                     sizeof(di));
         count = 1;
         i++;
@@ -203,11 +212,12 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
       const struct gattc_read_char_evt_param *p = &ep->read;
       struct conn *conn = find_by_conn_id(p->conn_id);
       if (conn == NULL) break;
-      struct mgos_bt_gattc_read res = {
-          .addr = conn->c.addr,
+      struct mgos_bt_gattc_read_result res = {
+          .conn = conn->c,
           .handle = p->handle,
           .data = mg_strdup(mg_mk_str_n((char *) p->value, p->value_len))};
-      mgos_event_trigger_schedule(MGOS_BT_GATTC_EVENT_READ, &res, sizeof(res));
+      mgos_event_trigger_schedule(MGOS_BT_GATTC_EV_READ_RESULT, &res,
+                                  sizeof(res));
       break;
     }
     case ESP_GATTC_UNREG_EVT: {
@@ -242,12 +252,12 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
            esp32_bt_addr_to_str(p->remote_bda, buf), p->handle, p->value_len));
       struct conn *conn = find_by_conn_id(p->conn_id);
       if (conn == NULL) break;
-      struct mgos_bt_gattc_read res = {
-          .addr = conn->c.addr,
+      struct mgos_bt_gattc_notify_arg arg = {
+          .conn = conn->c,
           .handle = p->handle,
-          .data = mg_strdup(mg_mk_str_n((char *) p->value, p->value_len))};
-      mgos_event_trigger_schedule(MGOS_BT_GATTC_EVENT_NOTIFY, &res,
-                                  sizeof(res));
+          .data = mg_strdup(mg_mk_str_n((char *) p->value, p->value_len)),
+      };
+      mgos_event_trigger_schedule(MGOS_BT_GATTC_EV_NOTIFY, &arg, sizeof(arg));
       break;
     }
     case ESP_GATTC_PREP_WRITE_EVT: {
@@ -284,7 +294,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
       struct conn *conn = find_by_conn_id(p->conn_id);
       if (conn != NULL) {
         conn->c.mtu = p->mtu;
-        mgos_event_trigger_schedule(MGOS_BT_GATTC_EVENT_CONNECT, &conn->c,
+        mgos_event_trigger_schedule(MGOS_BT_GATTC_EV_CONNECT, &conn->c,
                                     sizeof(conn->c));
       }
       break;

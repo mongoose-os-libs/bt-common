@@ -29,13 +29,14 @@
 extern "C" {
 #endif
 
+/* Note: Keep in sync with api_bt_gatts.js */
 enum mgos_bt_gatts_ev {
   MGOS_BT_GATTS_EV_CONNECT = 0,     /* NULL */
   MGOS_BT_GATTS_EV_READ = 1,        /* mgos_bt_gatts_read_arg */
   MGOS_BT_GATTS_EV_WRITE = 2,       /* mgos_bt_gatts_write_arg */
   MGOS_BT_GATTS_EV_NOTIFY_MODE = 3, /* mgos_bt_gatts_notify_mode_arg */
   MGOS_BT_GATTS_EV_IND_CONFIRM = 4, /* mgos_bt_gatts_ind_confirm_arg */
-  MGOS_BT_GATTS_EV_CLOSE = 5,       /* NULL */
+  MGOS_BT_GATTS_EV_DISCONNECT = 5,  /* NULL */
 };
 
 struct mgos_bt_gatts_conn {
@@ -71,17 +72,6 @@ struct mgos_bt_gatts_ind_confirm_arg {
   uint16_t handle;
   bool ok;
 };
-
-#define MGOS_BT_GATTS_PROP_READ (1 << 0)
-#define MGOS_BT_GATTS_PROP_WRITE (1 << 1)
-#define MGOS_BT_GATTS_PROP_NOTIFY (1 << 2)
-#define MGOS_BT_GATTS_PROP_INDICATE (1 << 3)
-
-#define MGOS_BT_GATTS_PROP_RWNI(r, w, n, i) \
-  (((r) ? MGOS_BT_GATTS_PROP_READ : 0) |    \
-   ((w) ? MGOS_BT_GATTS_PROP_WRITE : 0) |   \
-   ((n) ? MGOS_BT_GATTS_PROP_NOTIFY : 0) |  \
-   ((i) ? MGOS_BT_GATTS_PROP_INDICATE : 0))
 
 /* Note: before returning OK, READ handler must send data via
  * mgos_bt_gatts_send_resp_data(). */
@@ -125,7 +115,7 @@ void mgos_bt_gatts_notify(struct mgos_bt_gatts_conn *gsc,
                           enum mgos_bt_gatt_notify_mode mode, uint16_t handle,
                           struct mg_str data);
 
-bool mgos_bt_gatts_close(struct mgos_bt_gatts_conn *gsc);
+bool mgos_bt_gatts_disconnect(struct mgos_bt_gatts_conn *gsc);
 
 #ifdef __cplusplus
 }

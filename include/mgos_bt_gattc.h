@@ -15,47 +15,47 @@
  * limitations under the License.
  */
 
-#ifndef MOS_LIBS_GATTC_H
-#define MOS_LIBS_GATTC_H
+#pragma once
 
 #include "mgos_bt.h"
+#include "mgos_bt_gatt.h"
 #include "mgos_event.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define MGOS_BT_GATTC_EVENT_BASE MGOS_EVENT_BASE('G', 'A', 'C')
+#define MGOS_BT_GATTC_EV_BASE MGOS_EVENT_BASE('G', 'A', 'C')
 
+/* Note: Keep in sync with api_bt_gattc.js */
 enum mgos_bt_gattc_event {
-  MGOS_BT_GATTC_EVENT_CONNECT =
-      MGOS_BT_GATTC_EVENT_BASE,         /* struct mgos_bt_gattc_conn */
-  MGOS_BT_GATTC_EVENT_DISCONNECT,       /* struct mgos_bt_gattc_conn */
-  MGOS_BT_GATTC_EVENT_DISCOVERY_RESULT, /* struct mgos_bt_gattc_discovery */
-  MGOS_BT_GATTC_EVENT_READ,             /* struct mgos_bt_gattc_read */
-  MGOS_BT_GATTC_EVENT_NOTIFY,           /* struct mgos_bt_gattc_read */
-};
-
-struct mgos_bt_gattc_conn {
-  struct mgos_bt_addr addr; /* Device address */
-  int conn_id;              /* Connection ID */
-  int mtu;                  /* MTU of the connection */
+  MGOS_BT_GATTC_EV_CONNECT = MGOS_BT_GATTC_EV_BASE, /* mgos_bt_gatt_conn */
+  MGOS_BT_GATTC_EV_DISCONNECT,                      /* mgos_bt_gatt_conn */
+  MGOS_BT_GATTC_EV_DISCOVERY_RESULT, /* mgos_bt_gattc_discovery_result_arg */
+  MGOS_BT_GATTC_EV_READ_RESULT,      /* mgos_bt_gattc_read_result */
+  MGOS_BT_GATTC_EV_NOTIFY,           /* mgos_bt_gattc_notify_arg */
 };
 
 #define MGOS_BT_GATTC_INVALID_CONN_ID (-1)
 
-struct mgos_bt_gattc_discovery {
-  struct mgos_bt_addr addr; /* Device address */
-  struct mgos_bt_uuid svc;  /* Service UUID */
-  struct mgos_bt_uuid chr;  /* Characteristic UUID */
-  uint16_t handle;          /* Characteristic handle  */
-  uint8_t prop;             /* Characteristic properties */
+struct mgos_bt_gattc_discovery_result_arg {
+  struct mgos_bt_gatt_conn conn; /* Device address */
+  struct mgos_bt_uuid svc;       /* Service UUID */
+  struct mgos_bt_uuid chr;       /* Characteristic UUID */
+  uint16_t handle;               /* Characteristic handle  */
+  uint8_t prop;                  /* Characteristic properties */
 };
 
-struct mgos_bt_gattc_read {
-  struct mgos_bt_addr addr; /* Device address */
-  uint16_t handle;          /* Characteristic handle  */
-  struct mg_str data;       /* Data that has been read */
+struct mgos_bt_gattc_read_result {
+  struct mgos_bt_gatt_conn conn; /* Device address */
+  uint16_t handle;               /* Characteristic handle  */
+  struct mg_str data;            /* Data that has been read */
+};
+
+struct mgos_bt_gattc_notify_arg {
+  struct mgos_bt_gatt_conn conn; /* Device address */
+  uint16_t handle;               /* Characteristic handle  */
+  struct mg_str data;            /* Notification data sent by the server */
 };
 
 bool mgos_bt_gattc_connect(const struct mgos_bt_addr *addr);
@@ -69,5 +69,3 @@ bool mgos_bt_gattc_write(int conn_id, uint16_t handle, const void *data,
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* MOS_LIBS_GATTC_H */

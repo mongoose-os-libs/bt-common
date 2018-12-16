@@ -29,6 +29,16 @@ struct mgos_bt_gatt_conn {
   uint16_t mtu;             /* MTU of the connection */
 };
 
+#define MGOS_BT_GATT_PROP_READ (1 << 0)
+#define MGOS_BT_GATT_PROP_WRITE (1 << 1)
+#define MGOS_BT_GATT_PROP_NOTIFY (1 << 2)
+#define MGOS_BT_GATT_PROP_INDICATE (1 << 3)
+
+#define MGOS_BT_GATT_PROP_RWNI(r, w, n, i)                                    \
+  (((r) ? MGOS_BT_GATT_PROP_READ : 0) | ((w) ? MGOS_BT_GATT_PROP_WRITE : 0) | \
+   ((n) ? MGOS_BT_GATT_PROP_NOTIFY : 0) |                                     \
+   ((i) ? MGOS_BT_GATT_PROP_INDICATE : 0))
+
 enum mgos_bt_gatt_sec_level {
   /* No authentication required */
   MGOS_BT_GATT_SEC_LEVEL_NONE = 0,

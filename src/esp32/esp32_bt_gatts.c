@@ -586,7 +586,7 @@ static void esp32_bt_gatts_ev_mgos(void *arg) {
           memset(pw, 0, sizeof(*pw));
           free(pw);
         }
-        esp32_bt_gatts_call_handler(sse, 0, MGOS_BT_GATTS_EV_CLOSE, NULL);
+        esp32_bt_gatts_call_handler(sse, 0, MGOS_BT_GATTS_EV_DISCONNECT, NULL);
         free(sse->cccd_values);
         free(sse);
       }
@@ -954,7 +954,7 @@ static void esp32_bt_gatts_send_next_ind(
   }
 }
 
-bool mgos_bt_gatts_close(struct mgos_bt_gatts_conn *gsc) {
+bool mgos_bt_gatts_disconnect(struct mgos_bt_gatts_conn *gsc) {
   if (gsc == NULL) return false;
   return esp_ble_gatts_close(s_gatts_if, gsc->gc.conn_id) == ESP_OK;
 }
@@ -1013,7 +1013,7 @@ bool mgos_bt_gatts_register_service(const char *svc_uuid,
   for (cd = chars; cd->uuid != NULL; cd++) {
     nu++;
     na += 2;
-    if (cd->prop & (MGOS_BT_GATTS_PROP_NOTIFY | MGOS_BT_GATTS_PROP_INDICATE)) {
+    if (cd->prop & (MGOS_BT_GATT_PROP_NOTIFY | MGOS_BT_GATT_PROP_INDICATE)) {
       na++;  // CCCD
     }
   }
@@ -1055,17 +1055,17 @@ bool mgos_bt_gatts_register_service(const char *svc_uuid,
       dbe->att_desc.perm = get_read_perm(sec_level);
       dbe->att_desc.max_length = dbe->att_desc.length = 1;
       uint8_t cp = 0;
-      if (cd->prop & MGOS_BT_GATTS_PROP_READ) {
+      if (cd->prop & MGOS_BT_GATT_PROP_READ) {
         cp |= ESP_GATT_CHAR_PROP_BIT_READ;
       }
-      if (cd->prop & MGOS_BT_GATTS_PROP_WRITE) {
+      if (cd->prop & MGOS_BT_GATT_PROP_WRITE) {
         cp |= ESP_GATT_CHAR_PROP_BIT_WRITE;
         //| ESP_GATT_CHAR_PROP_BIT_WRITE_NR);
       }
-      if (cd->prop & MGOS_BT_GATTS_PROP_NOTIFY) {
+      if (cd->prop & MGOS_BT_GATT_PROP_NOTIFY) {
         cp |= ESP_GATT_CHAR_PROP_BIT_NOTIFY;
       }
-      if (cd->prop & MGOS_BT_GATTS_PROP_INDICATE) {
+      if (cd->prop & MGOS_BT_GATT_PROP_INDICATE) {
         cp |= ESP_GATT_CHAR_PROP_BIT_INDICATE;
       }
       ai->char_prop = cp;
@@ -1077,10 +1077,10 @@ bool mgos_bt_gatts_register_service(const char *svc_uuid,
       dbe->attr_control.auto_rsp = ESP_GATT_RSP_BY_APP;
       dbe->att_desc.uuid_length = uuid->len;
       dbe->att_desc.uuid_p = (uint8_t *) &uuid->uuid;
-      if (cd->prop & MGOS_BT_GATTS_PROP_READ) {
+      if (cd->prop & MGOS_BT_GATT_PROP_READ) {
         dbe->att_desc.perm |= get_read_perm(sec_level);
       }
-      if (cd->prop & MGOS_BT_GATTS_PROP_WRITE) {
+      if (cd->prop & MGOS_BT_GATT_PROP_WRITE) {
         dbe->att_desc.perm |= get_write_perm(sec_level);
       }
       ai->handler = cd->handler;
@@ -1089,7 +1089,7 @@ bool mgos_bt_gatts_register_service(const char *svc_uuid,
       dbe++;
       ai++;
     }
-    if (cd->prop & (MGOS_BT_GATTS_PROP_NOTIFY | MGOS_BT_GATTS_PROP_INDICATE)) {
+    if (cd->prop & (MGOS_BT_GATT_PROP_NOTIFY | MGOS_BT_GATT_PROP_INDICATE)) {
       /* Add client config descriptor */
       dbe->attr_control.auto_rsp = ESP_GATT_RSP_BY_APP;
       dbe->att_desc.uuid_length = ESP_UUID_LEN_16;

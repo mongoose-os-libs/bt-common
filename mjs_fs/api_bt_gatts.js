@@ -1,45 +1,12 @@
+load('api_bt_gatt.js');
+
 let GATTS = {
   EV_CONNECT: 0,
   EV_READ: 1,
   EV_WRITE: 2,
   EV_NOTIFY_MODE: 3,
   EV_IND_CONFIRM: 4,
-  EV_CLOSE: 5,
-
-  PROP_READ: 1,
-  PROP_WRITE: 2,
-  PROP_NOTIFY: 4,
-  PROP_INDICATE: 8,
-
-  SEC_LEVEL_NONE: 0,
-  SEC_LEVEL_AUTH: 1,
-  SEC_LEVEL_ENCR: 2,
-  SEC_LEVEL_ENCR_MITM: 3,
-
-  NOTIFY_MODE_OFF: 0,
-  NOTIFY_MODE_NOTIFY: 1,
-  NOTIFY_MODE_INDICATE: 2,
-
-  STATUS_OK: 0,
-  STATUS_INVALID_HANDLE: -1,
-  STATUS_READ_NOT_PERMITTED: -2,
-  STATUS_WRITE_NOT_PERMITTED: -3,
-  STATUS_INSUF_AUTHENTICATION: -4,
-  STATUS_REQUEST_NOT_SUPPORTED: -5,
-  STATUS_INVALID_OFFSET: -6,
-  STATUS_INSUF_AUTHORIZATION: -7,
-  STATUS_INVALID_ATT_VAL_LENGTH: -8,
-  STATUS_UNLIKELY_ERROR: -9,
-  STATUS_INSUF_RESOURCES: -10,
-
-  // ## **`GATTS.RWNI(r, w, n, i)`**
-  // Helper for combining common char property bits.
-  PROP_RWNI: function (r, w, n, i) {
-    return (r ? GATTS.PROP_READ : 0) |
-           (w ? GATTS.PROP_WRITE : 0) |
-           (n ? GATTS.PROP_NOTIFY : 0) |
-           (i ? GATTS.PROP_INDICATE : 0);
-  },
+  EV_DISCONNECT: 5,
 
   // ## **`GATTS.registerService(uuid, secLevel, chars, handler)`**
   // Register a GATTS service.
@@ -84,7 +51,7 @@ let GATTS = {
     GATTS._ntfy(c._c, mode, handle, data);
   },
 
-  _cd: ffi('void *mgos_bt_gatts_js_get_conn_def(void)')(),
+  _cd: ffi('void *mgos_bt_gatt_js_get_conn_def(void)')(),
   _rad: ffi('void *mgos_bt_gatts_js_get_read_arg_def(void)')(),
   _wad: ffi('void *mgos_bt_gatts_js_get_write_arg_def(void)')(),
   _nmad: ffi('void *mgos_bt_gatts_js_get_notify_mode_arg_def(void)')(),

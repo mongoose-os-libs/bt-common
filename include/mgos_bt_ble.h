@@ -29,6 +29,7 @@ extern "C" {
 
 #define MGOS_BT_BLE_EVENT_BASE MGOS_EVENT_BASE('B', 'L', 'E')
 
+/* Note: Keep in sync with api_bt_ble.js */
 enum mgos_bt_ble_event {
   MGOS_BT_BLE_EVENT_SCAN_RESULT =
       MGOS_BT_BLE_EVENT_BASE,  /* mgos_gap_scan_result */
