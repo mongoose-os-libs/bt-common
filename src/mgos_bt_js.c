@@ -18,7 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "mgos_bt_ble.h"
+#include "mgos_bt_gap.h"
 #include "mgos_bt_gattc.h"
 #include "mgos_bt_gatts.h"
 #include "mgos_utils.h"
@@ -29,11 +29,11 @@
 
 #include "mjs.h"
 
-bool mgos_bt_ble_scan_js(int duration_ms, bool active) {
-  struct mgos_bt_ble_scan_opts opts = {
+bool mgos_bt_gap_scan_js(int duration_ms, bool active) {
+  struct mgos_bt_gap_scan_opts opts = {
       .duration_ms = duration_ms, .active = active,
   };
-  return mgos_bt_ble_scan(&opts);
+  return mgos_bt_gap_scan(&opts);
 }
 
 static mjs_val_t bt_addr_to_str(struct mjs *mjs, void *ap) {
@@ -51,18 +51,18 @@ static mjs_val_t bt_uuid_to_str(struct mjs *mjs, void *ap) {
 
 /* Struct descriptor for use with s2o() */
 static const struct mjs_c_struct_member srdd[] = {
-    {"addr", offsetof(struct mgos_bt_ble_scan_result, addr),
+    {"addr", offsetof(struct mgos_bt_gap_scan_result, addr),
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_addr_to_str},
-    {"rssi", offsetof(struct mgos_bt_ble_scan_result, rssi),
+    {"rssi", offsetof(struct mgos_bt_gap_scan_result, rssi),
      MJS_STRUCT_FIELD_TYPE_INT, NULL},
-    {"advData", offsetof(struct mgos_bt_ble_scan_result, adv_data),
+    {"advData", offsetof(struct mgos_bt_gap_scan_result, adv_data),
      MJS_STRUCT_FIELD_TYPE_MG_STR, NULL},
-    {"scanRsp", offsetof(struct mgos_bt_ble_scan_result, scan_rsp),
+    {"scanRsp", offsetof(struct mgos_bt_gap_scan_result, scan_rsp),
      MJS_STRUCT_FIELD_TYPE_MG_STR, NULL},
     {NULL, 0, MJS_STRUCT_FIELD_TYPE_INVALID, NULL},
 };
 
-const struct mjs_c_struct_member *mgos_bt_ble_get_srdd(void) {
+const struct mjs_c_struct_member *mgos_bt_gap_get_srdd(void) {
   return srdd;
 }
 
@@ -86,9 +86,9 @@ const struct mjs_c_struct_member *mgos_bt_gatt_js_get_conn_def(void) {
  * it will only need to remain valid for a short time, mjs will make a copy
  * of it immediately.
  */
-const char *mgos_bt_ble_parse_name_js(struct mg_str *adv_data) {
-  static char s_name[MGOS_BT_BLE_ADV_DATA_MAX_LEN];
-  struct mg_str name = mgos_bt_ble_parse_name(*adv_data);
+const char *mgos_bt_gap_parse_name_js(struct mg_str *adv_data) {
+  static char s_name[MGOS_BT_GAP_ADV_DATA_MAX_LEN];
+  struct mg_str name = mgos_bt_gap_parse_name(*adv_data);
   size_t len = MIN(name.len, sizeof(s_name) - 1);
   memcpy(s_name, name.p, len);
   s_name[len] = '\0';

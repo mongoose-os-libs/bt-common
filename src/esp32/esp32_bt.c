@@ -16,7 +16,7 @@
  */
 
 #include "esp32_bt.h"
-#include "esp32_bt_ble.h"
+#include "esp32_bt_gap.h"
 #include "esp32_bt_internal.h"
 
 #include <stdbool.h>
@@ -90,7 +90,7 @@ static void mgos_bt_net_ev(int ev, void *evd, void *arg) {
   (void) arg;
 }
 
-int mgos_bt_ble_get_num_paired_devices(void) {
+int mgos_bt_gap_get_num_paired_devices(void) {
   return esp_ble_get_bond_device_num();
 }
 
@@ -140,7 +140,7 @@ bool mgos_bt_common_init(void) {
     goto out;
   }
 
-  if (!esp32_bt_ble_init()) {
+  if (!esp32_bt_gap_init()) {
     LOG(LL_ERROR, ("GAP init failed"));
     ret = false;
     goto out;
@@ -166,8 +166,8 @@ bool mgos_bt_common_init(void) {
 
   LOG(LL_INFO, ("Bluetooth init ok, MTU %d, pairing %s, %d paired devices",
                 mgos_sys_config_get_bt_gatt_mtu(),
-                (mgos_bt_ble_get_pairing_enable() ? "enabled" : "disabled"),
-                mgos_bt_ble_get_num_paired_devices()));
+                (mgos_bt_gap_get_pairing_enable() ? "enabled" : "disabled"),
+                mgos_bt_gap_get_num_paired_devices()));
   ret = true;
 
 out:

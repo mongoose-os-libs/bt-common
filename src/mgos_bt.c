@@ -19,7 +19,7 @@
 #include <string.h>
 
 #include "mgos_bt.h"
-#include "mgos_bt_ble.h"
+#include "mgos_bt_gap.h"
 #include "mgos_bt_gattc.h"
 #include "mgos_system.h"
 
@@ -158,8 +158,8 @@ static void trigger_cb(void *arg) {
   } else if (ei->ev == MGOS_BT_GATTC_EV_NOTIFY) {
     struct mgos_bt_gattc_notify_arg *p = ev_data;
     free((void *) p->data.p);
-  } else if (ei->ev == MGOS_BT_BLE_EVENT_SCAN_RESULT) {
-    struct mgos_bt_ble_scan_result *p = ev_data;
+  } else if (ei->ev == MGOS_BT_GAP_EVENT_SCAN_RESULT) {
+    struct mgos_bt_gap_scan_result *p = ev_data;
     free((void *) p->adv_data.p);
   }
   free(ei);

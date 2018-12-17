@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "mgos_bt_ble.h"
+#include "mgos_bt_gap.h"
 
 #include "esp32_bt.h"
 
@@ -25,27 +25,27 @@
 extern "C" {
 #endif
 
-#define MGOS_BT_BLE_DEFAULT_SCAN_WINDOW_MS 50
-#define MGOS_BT_BLE_DEFAULT_SCAN_INTERVAL_MS 100
-#define MGOS_BT_BLE_DEFAULT_SCAN_DURATION_MS 5000
+#define MGOS_BT_GAP_DEFAULT_SCAN_WINDOW_MS 50
+#define MGOS_BT_GAP_DEFAULT_SCAN_INTERVAL_MS 100
+#define MGOS_BT_GAP_DEFAULT_SCAN_DURATION_MS 5000
 
-#define MGOS_BT_BLE_MAX_SCAN_RSP_DATA_LEN 31
+#define MGOS_BT_GAP_MAX_SCAN_RSP_DATA_LEN 31
 
-void mgos_bt_ble_set_scan_rsp_data(const struct mg_str scan_rsp_data);
+void mgos_bt_gap_set_scan_rsp_data(const struct mg_str scan_rsp_data);
 
-bool mgos_bt_ble_get_adv_enable(void);
-bool mgos_bt_ble_set_adv_enable(bool adv_enable);
+bool mgos_bt_gap_get_adv_enable(void);
+bool mgos_bt_gap_set_adv_enable(bool adv_enable);
 
-bool mgos_bt_ble_get_pairing_enable(void);
-bool mgos_bt_ble_set_pairing_enable(bool pairing_enable);
+bool mgos_bt_gap_get_pairing_enable(void);
+bool mgos_bt_gap_set_pairing_enable(bool pairing_enable);
 
-int mgos_bt_ble_get_num_paired_devices(void);
+int mgos_bt_gap_get_num_paired_devices(void);
 /*
  * These are actually async. TODO(rojer): Add callbacks to the API.
  * For now, just allow some time for the calls to complete.
  */
-void mgos_bt_ble_remove_paired_device(const esp_bd_addr_t addr);
-void mgos_bt_ble_remove_all_paired_devices(void);
+void mgos_bt_gap_remove_paired_device(const esp_bd_addr_t addr);
+void mgos_bt_gap_remove_all_paired_devices(void);
 
 #ifdef __cplusplus
 }

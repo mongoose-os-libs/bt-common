@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-#include "mgos_bt_ble.h"
+#include "mgos_bt_gap.h"
 
 #ifdef MGOS_HAVE_MJS
 #include "mjs.h"
 #endif
 
-struct mg_str mgos_bt_ble_parse_adv_data(const struct mg_str adv_data,
-                                         enum mgos_bt_ble_eir_type t) {
+struct mg_str mgos_bt_gap_parse_adv_data(const struct mg_str adv_data,
+                                         enum mgos_bt_gap_eir_type t) {
   const uint8_t *dp = (const uint8_t *) adv_data.p;
   struct mg_str res = MG_NULL_STR;
   for (size_t i = 0; i < adv_data.len;) {
@@ -38,11 +38,11 @@ struct mg_str mgos_bt_ble_parse_adv_data(const struct mg_str adv_data,
   return res;
 }
 
-struct mg_str mgos_bt_ble_parse_name(const struct mg_str adv_data) {
+struct mg_str mgos_bt_gap_parse_name(const struct mg_str adv_data) {
   struct mg_str s =
-      mgos_bt_ble_parse_adv_data(adv_data, MGOS_BT_BLE_EIR_FULL_NAME);
+      mgos_bt_gap_parse_adv_data(adv_data, MGOS_BT_GAP_EIR_FULL_NAME);
   if (s.len == 0) {
-    s = mgos_bt_ble_parse_adv_data(adv_data, MGOS_BT_BLE_EIR_SHORT_NAME);
+    s = mgos_bt_gap_parse_adv_data(adv_data, MGOS_BT_GAP_EIR_SHORT_NAME);
   }
   return s;
 }
