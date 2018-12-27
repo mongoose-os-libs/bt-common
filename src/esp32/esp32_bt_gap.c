@@ -208,19 +208,10 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
           struct mgos_bt_gap_scan_result arg = {.rssi = p->rssi};
           memcpy(arg.addr.addr, p->bda, sizeof(arg.addr.addr));
           arg.addr.type = (enum mgos_bt_addr_type)(p->ble_addr_type + 1);
-          if (p->scan_rsp_len > 0) {
-            arg.adv_data = mg_strdup(
-                mg_mk_str_n((char *) p->ble_adv,
-                            ESP_BLE_ADV_DATA_LEN_MAX + p->scan_rsp_len));
-          } else {
-            arg.adv_data =
-                mg_strdup(mg_mk_str_n((char *) p->ble_adv, p->adv_data_len));
-          }
-          if (arg.adv_data.p != NULL) {
-            arg.adv_data.len = p->adv_data_len;
-            arg.scan_rsp = mg_mk_str_n(
-                arg.adv_data.p + ESP_BLE_ADV_DATA_LEN_MAX, p->scan_rsp_len);
-          }
+          arg.adv_data =
+              mg_strdup(mg_mk_str_n((char *) p->ble_adv, p->adv_data_len));
+          arg.scan_rsp = mg_strdup(mg_mk_str_n(
+              (char *) p->ble_adv + p->adv_data_len, p->scan_rsp_len));
           cs_to_hex(ad_hex, (void *) arg.adv_data.p, arg.adv_data.len);
           cs_to_hex(sr_hex, (void *) arg.scan_rsp.p, arg.scan_rsp.len);
           const struct mg_str name = mgos_bt_gap_parse_name(arg.adv_data);
