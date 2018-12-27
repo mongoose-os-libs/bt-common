@@ -116,6 +116,13 @@ bool mgos_bt_common_init(void) {
     return true;
   }
 
+  if (mgos_sys_config_get_bt_dev_name() != NULL) {
+    char *dev_name = strdup(mgos_sys_config_get_bt_dev_name());
+    mgos_expand_mac_address_placeholders(dev_name);
+    mgos_sys_config_set_bt_dev_name(dev_name);
+    free(dev_name);
+  }
+
   esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
 
   esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
