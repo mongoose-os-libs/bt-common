@@ -76,7 +76,9 @@ const char *mgos_bt_uuid_to_str(const struct mgos_bt_uuid *uuid, char *out) {
       mgos_bt_uuid128_to_str(uuid->uuid.uuid128, out);
       break;
     }
-    default: { sprintf(out, "?(%u)", uuid->len); }
+    default: {
+      sprintf(out, "?(%u)", uuid->len);
+    }
   }
   return out;
 }
@@ -161,6 +163,7 @@ static void trigger_cb(void *arg) {
   } else if (ei->ev == MGOS_BT_GAP_EVENT_SCAN_RESULT) {
     struct mgos_bt_gap_scan_result *p = ev_data;
     free((void *) p->adv_data.p);
+    free((void *) p->scan_rsp.p);
   }
   free(ei);
 }
