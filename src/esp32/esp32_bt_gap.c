@@ -81,6 +81,13 @@ static bool start_advertising(void) {
     LOG(LL_ERROR, ("bt.dev_name or device.id must be set"));
     return false;
   }
+  if (esp_ble_gap_set_device_name(dev_name) != ESP_OK) {
+    return false;
+  }
+  if (esp_ble_gap_config_adv_data(&s_adv_data)) {
+    LOG(LL_ERROR, ("Failed to set adv data"));
+    return false;
+  }
   esp_bd_addr_t local_addr;
   uint8_t addr_type;
   esp_ble_gap_get_local_used_addr(local_addr, &addr_type);
@@ -91,13 +98,6 @@ static bool start_advertising(void) {
   char addr[BT_ADDR_STR_LEN];
   LOG(LL_INFO, ("BT device name %s, addr %s", dev_name,
                 mgos_bt_addr_to_str(&la, MGOS_BT_ADDR_STRINGIFY_TYPE, addr)));
-  if (esp_ble_gap_set_device_name(dev_name) != ESP_OK) {
-    return false;
-  }
-  if (esp_ble_gap_config_adv_data(&s_adv_data)) {
-    LOG(LL_ERROR, ("Failed to set adv data"));
-    return false;
-  }
   return true;
 }
 
@@ -420,6 +420,11 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
   }
 }
 
+static void adv_enable_cb(void *arg) {
+  mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
+  (void) arg;
+}
+
 bool esp32_bt_gap_init(void) {
   if (esp_ble_gap_register_callback(esp32_gap_ev_handler) != ESP_OK) {
     return false;
@@ -460,5 +465,9 @@ bool esp32_bt_gap_init(void) {
     s_adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
   }
 
-  return mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
+  /* Delay until later, we've only just started the BT system and
+   * sometimes this throws a "No random address yet" error. */
+  mgos_invoke_cb(adv_enable_cb, NULL, false /* from_isr */);
+
+  return true;
 }
