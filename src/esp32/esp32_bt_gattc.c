@@ -85,8 +85,13 @@ bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle) {
 bool mgos_bt_gattc_write(int conn_id, uint16_t handle, const void *data,
                          int len) {
   if (esp32_bt_is_scanning()) return false;
-  /* TODO(lsm): implement */
-  return false;
+  struct conn *conn = find_by_conn_id(conn_id);
+  if (conn == NULL) return false;
+  uint8_t *dd = calloc(len, 1);
+  memcpy(dd, data, len);
+  esp_err_t err = esp_ble_gattc_write_char(conn->iface, conn_id, handle, len, dd, ESP_GATT_WRITE_TYPE_RSP, 0);
+  free(dd);
+  return err == ESP_OK;
 }
 
 bool mgos_bt_gattc_connect(const struct mgos_bt_addr *addr) {
