@@ -36,6 +36,11 @@
 
 static esp_gatt_if_t s_gattc_if = 0;
 
+static esp_bt_uuid_t notify_descr_uuid = {
+  .len = ESP_UUID_LEN_16,
+  .uuid = {.uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG,},
+};
+
 struct conn {
   struct mgos_bt_gatt_conn c;
   bool connected;
@@ -74,11 +79,6 @@ bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle) {
   if (conn == NULL) return false;
   esp_err_t err =
       esp_ble_gattc_register_for_notify(conn->iface, conn->c.addr.addr, handle);
-  /*
-   * This is not enough, must write to the corresponding descriptor
-   * to actually enable notifications on the remote side.
-   * TODO(lsm): Implement
-   */
   return err == ESP_OK;
 }
 
@@ -374,6 +374,72 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
       const struct gattc_reg_for_notify_evt_param *p = &ep->reg_for_notify;
       enum cs_log_level ll = ll_from_status(p->status);
       LOG(ll, ("REG_FOR_NOTIFY st %d h %u", p->status, p->handle));
+
+      if (p->status != ESP_GATT_OK) {
+        break;
+      }
+
+      uint16_t count = 0;
+      uint16_t notify_en = 1;
+      esp_gatt_status_t ret_status = esp_ble_gattc_get_attr_count(
+        s_gattc_if,
+        ep->connect.conn_id,
+        ESP_GATT_DB_DESCRIPTOR,
+        0,
+        0,
+        p->handle,
+        &count);
+
+      if (ret_status != ESP_GATT_OK){
+        LOG(LL_ERROR, ("esp_ble_gattc_get_attr_count error"));
+        break;
+      }
+
+      if (count <= 0) {
+        LOG(LL_ERROR, ("descr not found"));
+        break;
+      }
+
+      esp_gattc_descr_elem_t *descr_elem_result = malloc(sizeof(esp_gattc_descr_elem_t) * count);
+      if (!descr_elem_result) {
+        LOG(LL_ERROR, ("malloc error, gattc no mem"));
+        break;
+      }
+
+      ret_status = esp_ble_gattc_get_descr_by_char_handle(
+        s_gattc_if,
+        ep->connect.conn_id,
+        p->handle,
+        notify_descr_uuid,
+        descr_elem_result,
+        &count
+      );
+
+      if (ret_status != ESP_GATT_OK) {
+        LOG(LL_ERROR, ("esp_ble_gattc_get_descr_by_char_handle error"));
+      }
+
+      if (count > 0
+        && descr_elem_result[0].uuid.len == ESP_UUID_LEN_16
+        && descr_elem_result[0].uuid.uuid.uuid16 == ESP_GATT_UUID_CHAR_CLIENT_CONFIG
+      ) {
+        ret_status = esp_ble_gattc_write_char_descr(
+          s_gattc_if,
+          ep->connect.conn_id,
+          descr_elem_result[0].handle,
+          sizeof(notify_en),
+          (uint8_t *) &notify_en,
+          ESP_GATT_WRITE_TYPE_RSP,
+          ESP_GATT_AUTH_REQ_NONE
+        );
+      }
+
+      if (ret_status != ESP_GATT_OK){
+        LOG(LL_ERROR, ("esp_ble_gattc_write_char_descr error"));
+      }
+
+      free(descr_elem_result);
+
       break;
     }
     case ESP_GATTC_UNREG_FOR_NOTIFY_EVT: {
