@@ -84,11 +84,9 @@ bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle) {
   if (esp32_bt_is_scanning()) return false;
   struct conn *conn = find_by_conn_id(conn_id);
   if (conn == NULL) return false;
+  last_subscribe_conn_id = conn_id;
   esp_err_t err =
       esp_ble_gattc_register_for_notify(conn->iface, conn->c.addr.addr, handle);
-  if (err == ESP_OK) {
-    last_subscribe_conn_id = conn_id;
-  }
   return err == ESP_OK;
 }
 
