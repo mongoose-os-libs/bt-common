@@ -41,6 +41,8 @@ static esp_bt_uuid_t notify_descr_uuid = {
   .uuid = {.uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG,},
 };
 
+static uint16_t last_conn_id = 0;
+
 struct conn {
   struct mgos_bt_gatt_conn c;
   bool connected;
@@ -79,6 +81,11 @@ bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle) {
   if (conn == NULL) return false;
   esp_err_t err =
       esp_ble_gattc_register_for_notify(conn->iface, conn->c.addr.addr, handle);
+  /*
+   * This is not enough, must write to the corresponding descriptor
+   * to actually enable notifications on the remote side.
+   * TODO(lsm): Implement
+   */
   return err == ESP_OK;
 }
 
@@ -147,6 +154,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
       LOG(ll, ("OPEN if %d cid %u addr %s st %#hx mtu %d", iface, p->conn_id,
                esp32_bt_addr_to_str(p->remote_bda, buf), p->status, p->mtu));
       if (p->status == ESP_GATT_OK) {
+        last_conn_id = p->conn_id;
         struct conn *conn = find_by_addr(p->remote_bda);
         if (conn == NULL) {
           conn = calloc(1, sizeof(*conn));
@@ -383,7 +391,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
       uint16_t notify_en = 1;
       esp_gatt_status_t ret_status = esp_ble_gattc_get_attr_count(
         s_gattc_if,
-        ep->connect.conn_id,
+        last_conn_id,
         ESP_GATT_DB_DESCRIPTOR,
         0,
         0,
@@ -408,7 +416,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
 
       ret_status = esp_ble_gattc_get_descr_by_char_handle(
         s_gattc_if,
-        ep->connect.conn_id,
+        last_conn_id,
         p->handle,
         notify_descr_uuid,
         descr_elem_result,
@@ -425,7 +433,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
       ) {
         ret_status = esp_ble_gattc_write_char_descr(
           s_gattc_if,
-          ep->connect.conn_id,
+          last_conn_id,
           descr_elem_result[0].handle,
           sizeof(notify_en),
           (uint8_t *) &notify_en,
