@@ -41,6 +41,7 @@ static esp_bt_uuid_t notify_descr_uuid = {
   .uuid = {.uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG,},
 };
 
+// TODO this is hacky - using gloval variable
 static uint16_t last_conn_id = 0;
 
 struct conn {
