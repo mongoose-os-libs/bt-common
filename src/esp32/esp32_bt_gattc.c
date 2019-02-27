@@ -408,7 +408,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
 
       esp_gattc_descr_elem_t *descr_elem_result =
           malloc(sizeof(esp_gattc_descr_elem_t) * count);
-      if (descr_elem_result != NULL) {
+      if (descr_elem_result == NULL) {
         LOG(LL_ERROR, ("malloc error, gattc no mem"));
         break;
       }
