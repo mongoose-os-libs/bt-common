@@ -37,11 +37,15 @@
 static esp_gatt_if_t s_gattc_if = 0;
 
 static esp_bt_uuid_t notify_descr_uuid = {
-  .len = ESP_UUID_LEN_16,
-  .uuid = {.uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG,},
+    .len = ESP_UUID_LEN_16,
+    .uuid =
+        {
+            .uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG,
+        },
 };
 
-// TODO storing this in a global variable makes multiple concurrent subscribe operations unreliable
+// TODO storing this in a global variable makes multiple concurrent subscribe
+// operations unreliable
 static uint16_t last_subscribe_conn_id = 0;
 
 struct conn {
@@ -95,7 +99,8 @@ bool mgos_bt_gattc_write(int conn_id, uint16_t handle, const void *data,
   if (conn == NULL) return false;
   uint8_t *dd = calloc(len, 1);
   memcpy(dd, data, len);
-  esp_err_t err = esp_ble_gattc_write_char(conn->iface, conn_id, handle, len, dd, ESP_GATT_WRITE_TYPE_RSP, 0);
+  esp_err_t err = esp_ble_gattc_write_char(conn->iface, conn_id, handle, len,
+                                           dd, ESP_GATT_WRITE_TYPE_RSP, 0);
   free(dd);
   return err == ESP_OK;
 }
@@ -388,15 +393,10 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
       uint16_t count = 0;
       uint16_t notify_en = 1;
       esp_gatt_status_t ret_status = esp_ble_gattc_get_attr_count(
-        s_gattc_if,
-        last_subscribe_conn_id,
-        ESP_GATT_DB_DESCRIPTOR,
-        0,
-        0,
-        p->handle,
-        &count);
+          s_gattc_if, last_subscribe_conn_id, ESP_GATT_DB_DESCRIPTOR, 0, 0,
+          p->handle, &count);
 
-      if (ret_status != ESP_GATT_OK){
+      if (ret_status != ESP_GATT_OK) {
         LOG(LL_ERROR, ("esp_ble_gattc_get_attr_count error"));
         break;
       }
@@ -406,41 +406,31 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
         break;
       }
 
-      esp_gattc_descr_elem_t *descr_elem_result = malloc(sizeof(esp_gattc_descr_elem_t) * count);
+      esp_gattc_descr_elem_t *descr_elem_result =
+          malloc(sizeof(esp_gattc_descr_elem_t) * count);
       if (descr_elem_result != NULL) {
         LOG(LL_ERROR, ("malloc error, gattc no mem"));
         break;
       }
 
       ret_status = esp_ble_gattc_get_descr_by_char_handle(
-        s_gattc_if,
-        last_subscribe_conn_id,
-        p->handle,
-        notify_descr_uuid,
-        descr_elem_result,
-        &count
-      );
+          s_gattc_if, last_subscribe_conn_id, p->handle, notify_descr_uuid,
+          descr_elem_result, &count);
 
       if (ret_status != ESP_GATT_OK) {
         LOG(LL_ERROR, ("esp_ble_gattc_get_descr_by_char_handle error"));
       }
 
-      if (count > 0
-        && descr_elem_result[0].uuid.len == ESP_UUID_LEN_16
-        && descr_elem_result[0].uuid.uuid.uuid16 == ESP_GATT_UUID_CHAR_CLIENT_CONFIG
-      ) {
+      if (count > 0 && descr_elem_result[0].uuid.len == ESP_UUID_LEN_16 &&
+          descr_elem_result[0].uuid.uuid.uuid16 ==
+              ESP_GATT_UUID_CHAR_CLIENT_CONFIG) {
         ret_status = esp_ble_gattc_write_char_descr(
-          s_gattc_if,
-          last_subscribe_conn_id,
-          descr_elem_result[0].handle,
-          sizeof(notify_en),
-          (uint8_t *) &notify_en,
-          ESP_GATT_WRITE_TYPE_RSP,
-          ESP_GATT_AUTH_REQ_NONE
-        );
+            s_gattc_if, last_subscribe_conn_id, descr_elem_result[0].handle,
+            sizeof(notify_en), (uint8_t *) &notify_en, ESP_GATT_WRITE_TYPE_RSP,
+            ESP_GATT_AUTH_REQ_NONE);
       }
 
-      if (ret_status != ESP_GATT_OK){
+      if (ret_status != ESP_GATT_OK) {
         LOG(LL_ERROR, ("esp_ble_gattc_write_char_descr error"));
       }
 
