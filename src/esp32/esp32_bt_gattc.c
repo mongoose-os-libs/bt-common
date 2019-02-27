@@ -384,7 +384,8 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
     case ESP_GATTC_REG_FOR_NOTIFY_EVT: {
       const struct gattc_reg_for_notify_evt_param *p = &ep->reg_for_notify;
       enum cs_log_level ll = ll_from_status(p->status);
-      LOG(ll, ("REG_FOR_NOTIFY st %d h %u", p->status, p->handle));
+      LOG(ll, ("REG_FOR_NOTIFY st %d h %u cid %d", p->status, p->handle,
+               last_subscribe_conn_id));
 
       if (p->status != ESP_GATT_OK) {
         break;
