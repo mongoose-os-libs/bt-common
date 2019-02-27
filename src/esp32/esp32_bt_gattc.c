@@ -77,6 +77,7 @@ static struct conn *find_by_conn_id(int conn_id) {
 bool mgos_bt_gattc_read(int conn_id, uint16_t handle) {
   if (esp32_bt_is_scanning()) return false;
   esp_err_t err = esp_ble_gattc_read_char(s_gattc_if, conn_id, handle, 0);
+  LOG(LL_DEBUG, ("READ %d: %d", conn_id, err));
   return err == ESP_OK;
 }
 
@@ -87,6 +88,7 @@ bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle) {
   last_subscribe_conn_id = conn_id;
   esp_err_t err =
       esp_ble_gattc_register_for_notify(conn->iface, conn->c.addr.addr, handle);
+  LOG(LL_DEBUG, ("REG_NOTIF %d: %d", conn_id, err));
   return err == ESP_OK;
 }
 
@@ -95,11 +97,12 @@ bool mgos_bt_gattc_write(int conn_id, uint16_t handle, const void *data,
   if (esp32_bt_is_scanning()) return false;
   struct conn *conn = find_by_conn_id(conn_id);
   if (conn == NULL) return false;
-  uint8_t *dd = calloc(len, 1);
-  memcpy(dd, data, len);
+  uint8_t *data1 = calloc(len, 1);
+  memcpy(data1, data, len);
   esp_err_t err = esp_ble_gattc_write_char(conn->iface, conn_id, handle, len,
-                                           dd, ESP_GATT_WRITE_TYPE_RSP, 0);
-  free(dd);
+                                           data1, ESP_GATT_WRITE_TYPE_RSP, 0);
+  LOG(LL_DEBUG, ("WRITE %d: %d", conn_id, err));
+  free(data1);
   return err == ESP_OK;
 }
 
@@ -396,12 +399,14 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
           p->handle, &count);
 
       if (ret_status != ESP_GATT_OK) {
-        LOG(LL_ERROR, ("esp_ble_gattc_get_attr_count error"));
+        LOG(LL_ERROR, ("esp_ble_gattc_get_attr_count h %u cid %d err %d",
+                       p->handle, last_subscribe_conn_id, ret_status));
         break;
       }
 
       if (count <= 0) {
-        LOG(LL_ERROR, ("descr not found"));
+        LOG(LL_ERROR,
+            ("descr not found h %u cid %d", p->handle, last_subscribe_conn_id));
         break;
       }
 
@@ -417,7 +422,9 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
           descr_elem_result, &count);
 
       if (ret_status != ESP_GATT_OK) {
-        LOG(LL_ERROR, ("esp_ble_gattc_get_descr_by_char_handle error"));
+        LOG(LL_ERROR,
+            ("esp_ble_gattc_get_descr_by_char_handle h %u cid %d err %d",
+             p->handle, last_subscribe_conn_id, ret_status));
       }
 
       if (count > 0 && descr_elem_result[0].uuid.len == ESP_UUID_LEN_16 &&
@@ -430,7 +437,9 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
       }
 
       if (ret_status != ESP_GATT_OK) {
-        LOG(LL_ERROR, ("esp_ble_gattc_write_char_descr error"));
+        LOG(LL_ERROR,
+            ("esp_ble_gattc_write_char_descr h %u cid %d err %d",
+             descr_elem_result[0].handle, last_subscribe_conn_id, ret_status));
       }
 
       free(descr_elem_result);
