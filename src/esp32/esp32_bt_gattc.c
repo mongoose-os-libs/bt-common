@@ -36,6 +36,18 @@
 
 static esp_gatt_if_t s_gattc_if = 0;
 
+static const esp_bt_uuid_t notify_descr_uuid = {
+    .len = ESP_UUID_LEN_16,
+    .uuid =
+        {
+         .uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG,
+        },
+};
+
+// TODO storing this in a global variable makes multiple concurrent subscribe
+// operations unreliable
+static uint16_t last_subscribe_conn_id = 0;
+
 struct conn {
   struct mgos_bt_gatt_conn c;
   bool connected;
@@ -65,6 +77,7 @@ static struct conn *find_by_conn_id(int conn_id) {
 bool mgos_bt_gattc_read(int conn_id, uint16_t handle) {
   if (esp32_bt_is_scanning()) return false;
   esp_err_t err = esp_ble_gattc_read_char(s_gattc_if, conn_id, handle, 0);
+  LOG(LL_DEBUG, ("READ %d: %d", conn_id, err));
   return err == ESP_OK;
 }
 
@@ -72,21 +85,23 @@ bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle) {
   if (esp32_bt_is_scanning()) return false;
   struct conn *conn = find_by_conn_id(conn_id);
   if (conn == NULL) return false;
+  last_subscribe_conn_id = conn_id;
   esp_err_t err =
       esp_ble_gattc_register_for_notify(conn->iface, conn->c.addr.addr, handle);
-  /*
-   * This is not enough, must write to the corresponding descriptor
-   * to actually enable notifications on the remote side.
-   * TODO(lsm): Implement
-   */
+  LOG(LL_DEBUG, ("REG_NOTIF %d: %d", conn_id, err));
   return err == ESP_OK;
 }
 
 bool mgos_bt_gattc_write(int conn_id, uint16_t handle, const void *data,
                          int len) {
   if (esp32_bt_is_scanning()) return false;
-  /* TODO(lsm): implement */
-  return false;
+  struct conn *conn = find_by_conn_id(conn_id);
+  if (conn == NULL) return false;
+  esp_err_t err =
+      esp_ble_gattc_write_char(conn->iface, conn_id, handle, len, (void *) data,
+                               ESP_GATT_WRITE_TYPE_RSP, 0);
+  LOG(LL_DEBUG, ("WRITE %d: %d", conn_id, err));
+  return err == ESP_OK;
 }
 
 bool mgos_bt_gattc_connect(const struct mgos_bt_addr *addr) {
@@ -368,7 +383,65 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
     case ESP_GATTC_REG_FOR_NOTIFY_EVT: {
       const struct gattc_reg_for_notify_evt_param *p = &ep->reg_for_notify;
       enum cs_log_level ll = ll_from_status(p->status);
-      LOG(ll, ("REG_FOR_NOTIFY st %d h %u", p->status, p->handle));
+      LOG(ll, ("REG_FOR_NOTIFY st %d h %u cid %d", p->status, p->handle,
+               last_subscribe_conn_id));
+
+      if (p->status != ESP_GATT_OK) {
+        break;
+      }
+
+      uint16_t count = 0;
+      uint16_t notify_en = 1;
+      esp_gatt_status_t ret_status = esp_ble_gattc_get_attr_count(
+          s_gattc_if, last_subscribe_conn_id, ESP_GATT_DB_DESCRIPTOR, 0, 0,
+          p->handle, &count);
+
+      if (ret_status != ESP_GATT_OK) {
+        LOG(LL_ERROR, ("esp_ble_gattc_get_attr_count h %u cid %d err %d",
+                       p->handle, last_subscribe_conn_id, ret_status));
+        break;
+      }
+
+      if (count <= 0) {
+        LOG(LL_ERROR,
+            ("descr not found h %u cid %d", p->handle, last_subscribe_conn_id));
+        break;
+      }
+
+      esp_gattc_descr_elem_t *descr_elem_result =
+          (esp_gattc_descr_elem_t *) calloc(count, sizeof(*descr_elem_result));
+      if (descr_elem_result == NULL) {
+        LOG(LL_ERROR, ("malloc error, gattc no mem"));
+        break;
+      }
+
+      ret_status = esp_ble_gattc_get_descr_by_char_handle(
+          s_gattc_if, last_subscribe_conn_id, p->handle, notify_descr_uuid,
+          descr_elem_result, &count);
+
+      if (ret_status != ESP_GATT_OK) {
+        LOG(LL_ERROR,
+            ("esp_ble_gattc_get_descr_by_char_handle h %u cid %d err %d",
+             p->handle, last_subscribe_conn_id, ret_status));
+      }
+
+      if (count > 0 && descr_elem_result[0].uuid.len == ESP_UUID_LEN_16 &&
+          descr_elem_result[0].uuid.uuid.uuid16 ==
+              ESP_GATT_UUID_CHAR_CLIENT_CONFIG) {
+        ret_status = esp_ble_gattc_write_char_descr(
+            s_gattc_if, last_subscribe_conn_id, descr_elem_result[0].handle,
+            sizeof(notify_en), (uint8_t *) &notify_en, ESP_GATT_WRITE_TYPE_RSP,
+            ESP_GATT_AUTH_REQ_NONE);
+      }
+
+      if (ret_status != ESP_GATT_OK) {
+        LOG(LL_ERROR,
+            ("esp_ble_gattc_write_char_descr h %u cid %d err %d",
+             descr_elem_result[0].handle, last_subscribe_conn_id, ret_status));
+      }
+
+      free(descr_elem_result);
+
       break;
     }
     case ESP_GATTC_UNREG_FOR_NOTIFY_EVT: {
