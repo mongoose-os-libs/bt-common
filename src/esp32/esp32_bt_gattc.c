@@ -168,8 +168,7 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
         conn->c.conn_id = p->conn_id;
         conn->c.mtu = p->mtu;
       } else {
-        esp_ble_gattc_close(iface, p->conn_id);
-        disconnect(p->conn_id, p->remote_bda);
+        // We are about to disconnect anyway, no action needed.
       }
       break;
     }
