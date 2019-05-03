@@ -414,6 +414,14 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
           ("ADD_WHITELIST_COMPLETE st %d op %d", p->status, p->wl_opration));
       break;
     }
+    case ESP_GAP_BLE_UPDATE_DUPLICATE_EXCEPTIONAL_LIST_COMPLETE_EVT: {
+      const struct ble_update_duplicate_exceptional_list_cmpl_evt_param *p =
+          &ep->update_duplicate_exceptional_list_cmpl;
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll,
+          ("UPDATE_DUPLICATE_EXCEPTIONAL_LIST_COMPLETE st %d sc %d", p->status, p->subcode));
+      break;
+    }
     case ESP_GAP_BLE_EVT_MAX: {
       break;
     }
