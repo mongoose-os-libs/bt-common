@@ -47,15 +47,22 @@ enum mgos_bt_gap_eir_type {
   MGOS_BT_GAP_EIR_SHORT_NAME = 0x8,
   MGOS_BT_GAP_EIR_FULL_NAME = 0x9,
   MGOS_BT_GAP_EIR_DEVICE_ID = 0x10,
+  MGOS_BT_GAP_EIR_SERVICE_DATA_16 = 0x16,
+  MGOS_BT_GAP_EIR_SERVICE_DATA_32 = 0x20,
+  MGOS_BT_GAP_EIR_SERVICE_DATA_128 = 0x21,
   MGOS_BT_GAP_EIR_URL = 0x24,
   MGOS_BT_GAP_EIR_MANUFACTURER_SPECIFIC_DATA = 0xff,
 };
 
-struct mg_str mgos_bt_gap_parse_adv_data(const struct mg_str adv_data,
+struct mg_str mgos_bt_gap_parse_adv_data(struct mg_str adv_data,
                                          enum mgos_bt_gap_eir_type);
 
 /* Either LONG or, if not provided, SHORT_NAME. */
-struct mg_str mgos_bt_gap_parse_name(const struct mg_str adv_data);
+struct mg_str mgos_bt_gap_parse_name(struct mg_str adv_data);
+
+/* Returns service data for a specific service (if present). */
+struct mg_str mgos_bt_gap_parse_service_data(struct mg_str adv_data,
+                                             const struct mgos_bt_uuid *svc_uuid);
 
 struct mgos_bt_gap_scan_result {
   struct mgos_bt_addr addr; /* MAC address. Can change randomly. */
