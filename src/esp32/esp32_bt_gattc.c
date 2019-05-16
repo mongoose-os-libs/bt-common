@@ -40,7 +40,7 @@ static const esp_bt_uuid_t notify_descr_uuid = {
     .len = ESP_UUID_LEN_16,
     .uuid =
         {
-         .uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG,
+            .uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG,
         },
 };
 

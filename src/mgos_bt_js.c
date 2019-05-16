@@ -31,7 +31,8 @@
 
 bool mgos_bt_gap_scan_js(int duration_ms, bool active) {
   struct mgos_bt_gap_scan_opts opts = {
-      .duration_ms = duration_ms, .active = active,
+      .duration_ms = duration_ms,
+      .active = active,
   };
   return mgos_bt_gap_scan(&opts);
 }

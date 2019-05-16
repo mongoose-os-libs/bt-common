@@ -356,7 +356,10 @@ static void esp32_bt_gatts_do_write(struct esp32_bt_gatts_session_entry *sse,
     return;
   }
   struct mgos_bt_gatts_write_arg arg = {
-      .trans_id = trans_id, .offset = offset, .data = data, .need_rsp = true,
+      .trans_id = trans_id,
+      .offset = offset,
+      .data = data,
+      .need_rsp = true,
   };
   esp32_dbe_to_uuid(dbe, &arg.uuid);
   LOG(LL_DEBUG,
@@ -500,10 +503,10 @@ static void esp32_bt_gatts_ev_mgos(void *arg) {
         esp_gatt_rsp_t rsp = {
             .attr_value =
                 {
-                 .handle = p->handle,
-                 .offset = 0,
-                 .len = 2,
-                 .auth_req = ESP_GATT_AUTH_REQ_NONE,
+                    .handle = p->handle,
+                    .offset = 0,
+                    .len = 2,
+                    .auth_req = ESP_GATT_AUTH_REQ_NONE,
                 },
         };
         memcpy(rsp.attr_value.value, &sse->cccd_values[ci], 2);
@@ -513,7 +516,9 @@ static void esp32_bt_gatts_ev_mgos(void *arg) {
         break;
       }
       struct mgos_bt_gatts_write_arg arg = {
-          .handle = p->handle, .trans_id = p->trans_id, .offset = p->offset,
+          .handle = p->handle,
+          .trans_id = p->trans_id,
+          .offset = p->offset,
       };
       esp32_dbe_to_uuid(dbe, &arg.uuid);
       LOG(LL_DEBUG, ("READ %s cid %d tid %u h %u (%s) off %d",
@@ -619,7 +624,8 @@ static void esp32_bt_gatts_ev_mgos(void *arg) {
             find_session(ei->gatts_if, p->conn_id, pi->handle, &ai);
         if (sse != NULL) {
           struct mgos_bt_gatts_ind_confirm_arg arg = {
-              .handle = pi->handle, .ok = (p->status == ESP_GATT_OK),
+              .handle = pi->handle,
+              .ok = (p->status == ESP_GATT_OK),
           };
           esp32_bt_gatts_call_handler(sse, ai, MGOS_BT_GATTS_EV_IND_CONFIRM,
                                       &arg);
@@ -1133,10 +1139,10 @@ void mgos_bt_gatts_send_resp_data(struct mgos_bt_gatts_conn *gsc,
   esp_gatt_rsp_t rsp = {
       .attr_value =
           {
-           .handle = ra->handle,
-           .offset = ra->offset,
-           .len = data.len,
-           .auth_req = ESP_GATT_AUTH_REQ_NONE,
+              .handle = ra->handle,
+              .offset = ra->offset,
+              .len = data.len,
+              .auth_req = ESP_GATT_AUTH_REQ_NONE,
           },
   };
   memcpy(rsp.attr_value.value, data.p, data.len);

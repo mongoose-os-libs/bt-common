@@ -76,9 +76,8 @@ const char *mgos_bt_uuid_to_str(const struct mgos_bt_uuid *uuid, char *out) {
       mgos_bt_uuid128_to_str(uuid->uuid.uuid128, out);
       break;
     }
-    default: {
+    default:
       sprintf(out, "?(%u)", uuid->len);
-    }
   }
   return out;
 }
