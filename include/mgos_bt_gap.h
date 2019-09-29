@@ -44,6 +44,12 @@ struct mgos_bt_gap_scan_opts {
 // https://www.bluetooth.com/specifications/assigned-numbers/generic-access-profile
 enum mgos_bt_gap_eir_type {
   MGOS_BT_GAP_EIR_FLAGS = 0x1,
+  MGOS_BT_GAP_EIR_SERVICE_16_INCOMPLETE = 0x2,
+  MGOS_BT_GAP_EIR_SERVICE_16 = 0x3,
+  MGOS_BT_GAP_EIR_SERVICE_32_INCOMPLETE = 0x4,
+  MGOS_BT_GAP_EIR_SERVICE_32 = 0x5,
+  MGOS_BT_GAP_EIR_SERVICE_128_INCOMPLETE = 0x6,
+  MGOS_BT_GAP_EIR_SERVICE_128 = 0x7,
   MGOS_BT_GAP_EIR_SHORT_NAME = 0x8,
   MGOS_BT_GAP_EIR_FULL_NAME = 0x9,
   MGOS_BT_GAP_EIR_DEVICE_ID = 0x10,
@@ -60,9 +66,14 @@ struct mg_str mgos_bt_gap_parse_adv_data(struct mg_str adv_data,
 /* Either LONG or, if not provided, SHORT_NAME. */
 struct mg_str mgos_bt_gap_parse_name(struct mg_str adv_data);
 
+/* Return true if advertisement data contains advertisement for service
+ * with given UUID. */
+bool mgos_bt_gap_adv_data_has_service(struct mg_str adv_data,
+                                      const struct mgos_bt_uuid *svc_uuid);
+
 /* Returns service data for a specific service (if present). */
-struct mg_str mgos_bt_gap_parse_service_data(struct mg_str adv_data,
-                                             const struct mgos_bt_uuid *svc_uuid);
+struct mg_str mgos_bt_gap_parse_service_data(
+    struct mg_str adv_data, const struct mgos_bt_uuid *svc_uuid);
 
 struct mgos_bt_gap_scan_result {
   struct mgos_bt_addr addr; /* MAC address. Can change randomly. */

@@ -49,8 +49,38 @@ struct mg_str mgos_bt_gap_parse_name(struct mg_str adv_data) {
   return s;
 }
 
-struct mg_str mgos_bt_gap_parse_service_data(struct mg_str adv_data,
-                                             const struct mgos_bt_uuid *svc_uuid) {
+bool mgos_bt_gap_adv_data_has_service(struct mg_str adv_data,
+                                      const struct mgos_bt_uuid *svc_uuid) {
+  enum mgos_bt_gap_eir_type t1, t2;
+  switch (svc_uuid->len) {
+    case 2:
+      t1 = MGOS_BT_GAP_EIR_SERVICE_16;
+      t2 = MGOS_BT_GAP_EIR_SERVICE_16_INCOMPLETE;
+      break;
+    case 4:
+      t1 = MGOS_BT_GAP_EIR_SERVICE_32;
+      t2 = MGOS_BT_GAP_EIR_SERVICE_32_INCOMPLETE;
+      break;
+    case 16:
+      t1 = MGOS_BT_GAP_EIR_SERVICE_128;
+      t2 = MGOS_BT_GAP_EIR_SERVICE_128_INCOMPLETE;
+      break;
+    default:
+      return false;
+  }
+  struct mg_str d = adv_data;
+  while ((d = mgos_bt_gap_parse_adv_data(d, t1)).len == svc_uuid->len) {
+    if (memcmp(d.p, svc_uuid->uuid.uuid128, svc_uuid->len) == 0) return true;
+  }
+  d = adv_data;
+  while ((d = mgos_bt_gap_parse_adv_data(d, t2)).len == svc_uuid->len) {
+    if (memcmp(d.p, svc_uuid->uuid.uuid128, svc_uuid->len) == 0) return true;
+  }
+  return false;
+}
+
+struct mg_str mgos_bt_gap_parse_service_data(
+    struct mg_str adv_data, const struct mgos_bt_uuid *svc_uuid) {
   enum mgos_bt_gap_eir_type et;
   switch (svc_uuid->len) {
     case sizeof(svc_uuid->uuid.uuid16):
@@ -69,7 +99,8 @@ struct mg_str mgos_bt_gap_parse_service_data(struct mg_str adv_data,
     struct mg_str svc_data = mgos_bt_gap_parse_adv_data(adv_data, et);
     if (svc_data.len < svc_uuid->len) break;
     if (memcmp(svc_data.p, &svc_uuid->uuid, svc_uuid->len) == 0) {
-      return mg_mk_str_n(svc_data.p + svc_uuid->len, svc_data.len - svc_uuid->len);
+      return mg_mk_str_n(svc_data.p + svc_uuid->len,
+                         svc_data.len - svc_uuid->len);
     }
     svc_data.p += svc_data.len;
     adv_data.len = adv_data.len - (svc_data.p - adv_data.p);
