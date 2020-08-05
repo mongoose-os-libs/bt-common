@@ -63,8 +63,8 @@ bool mgos_bt_gattc_discover(int conn_id);
 bool mgos_bt_gattc_disconnect(int conn_id);
 bool mgos_bt_gattc_read(int conn_id, uint16_t handle);
 bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle);
-bool mgos_bt_gattc_write(int conn_id, uint16_t handle, const void *data,
-                         int len);
+bool mgos_bt_gattc_write(int conn_id, uint16_t handle, struct mg_str data,
+                         bool resp_required);
 
 #ifdef __cplusplus
 }

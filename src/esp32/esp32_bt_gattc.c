@@ -92,14 +92,15 @@ bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle) {
   return err == ESP_OK;
 }
 
-bool mgos_bt_gattc_write(int conn_id, uint16_t handle, const void *data,
-                         int len) {
+bool mgos_bt_gattc_write(int conn_id, uint16_t handle, struct mg_str data,
+                         bool resp_required) {
   if (esp32_bt_is_scanning()) return false;
   struct conn *conn = find_by_conn_id(conn_id);
   if (conn == NULL) return false;
-  esp_err_t err =
-      esp_ble_gattc_write_char(conn->iface, conn_id, handle, len, (void *) data,
-                               ESP_GATT_WRITE_TYPE_RSP, 0);
+  esp_gatt_write_type_t wt =
+      (resp_required ? ESP_GATT_WRITE_TYPE_RSP : ESP_GATT_WRITE_TYPE_NO_RSP);
+  esp_err_t err = esp_ble_gattc_write_char(conn->iface, conn_id, handle,
+                                           data.len, (void *) data.p, wt, 0);
   LOG(LL_DEBUG, ("WRITE %d: %d", conn_id, err));
   return err == ESP_OK;
 }

@@ -104,7 +104,7 @@ bool mgos_bt_gattc_connect_js(const char *addr_s) {
 
 bool mgos_bt_gattc_write_js(int conn_id, uint16_t handle,
                             const struct mg_str *data) {
-  return mgos_bt_gattc_write(conn_id, handle, data->p, data->len);
+  return mgos_bt_gattc_write(conn_id, handle, *data, true /* resp_required */);
 }
 
 static const struct mjs_c_struct_member gattc_discovery_result_arg_def[] = {
