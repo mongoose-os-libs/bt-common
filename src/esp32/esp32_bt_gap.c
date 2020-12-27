@@ -422,6 +422,12 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
                p->status, p->subcode));
       break;
     }
+    case ESP_GAP_BLE_SET_CHANNELS_EVT: {
+      const struct ble_set_channels_evt_param *p = &ep->ble_set_channels;
+      enum cs_log_level ll = ll_from_status(p->stat);
+      LOG(ll, ("SET_CHANNELS st %d", p->stat));
+      break;
+    }
     case ESP_GAP_BLE_EVT_MAX: {
       break;
     }

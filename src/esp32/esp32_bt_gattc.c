@@ -482,6 +482,12 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
       LOG(ll, ("GET_ADDR_LIST st %d num_addr %u", p->status, p->num_addr));
       break;
     }
+    case ESP_GATTC_DIS_SRVC_CMPL_EVT: {
+      const struct gattc_dis_srvc_cmpl_evt_param *p = &ep->dis_srvc_cmpl;
+      enum cs_log_level ll = ll_from_status(p->status);
+      LOG(ll, ("DIS_SRVC_CMPL st %d cid %u", p->status, p->conn_id));
+      break;
+    }
   }
 }
 

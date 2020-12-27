@@ -1156,7 +1156,7 @@ void mgos_bt_gatts_notify(struct mgos_bt_gatts_conn *gsc,
   if (gsc == NULL || mode == MGOS_BT_GATT_NOTIFY_MODE_OFF) return;
   struct esp32_bt_gatts_session_entry *sse =
       find_session(s_gatts_if, gsc->gc.conn_id, handle, NULL);
-  if (sse == NULL) return false;
+  if (sse == NULL) return;
   struct esp32_bt_gatts_pending_ind *pi = calloc(1, sizeof(*pi));
   if (pi != NULL) {
     pi->handle = handle;
