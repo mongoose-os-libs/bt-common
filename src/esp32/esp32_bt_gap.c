@@ -34,9 +34,11 @@
 #include "mgos_bt_gap.h"
 #include "mgos_sys_config.h"
 #include "mgos_system.h"
+#include "mgos_timers.h"
 
 #include "esp32_bt_internal.h"
 
+static struct mg_str s_name = MG_NULL_STR;
 static bool s_adv_enable = false;
 static bool s_advertising = false;
 static bool s_pairing_enable = false;
@@ -72,22 +74,19 @@ bool esp32_bt_is_scanning(void) {
   return s_scanning;
 }
 
+bool mgos_bt_gap_set_name(struct mg_str name) {
+  mg_strfree(&s_name);
+  s_name = mg_strdup_nul(name);
+  return (esp_ble_gap_set_device_name(s_name.p) == ESP_OK);
+}
+
+struct mg_str mgos_bt_gap_get_name(void) {
+  return s_name;
+}
+
 static bool start_advertising(void) {
   if (s_advertising) return true;
   if (!s_adv_enable) return false;
-  const char *dev_name = mgos_sys_config_get_bt_dev_name();
-  if (dev_name == NULL) dev_name = mgos_sys_config_get_device_id();
-  if (dev_name == NULL) {
-    LOG(LL_ERROR, ("bt.dev_name or device.id must be set"));
-    return false;
-  }
-  if (esp_ble_gap_set_device_name(dev_name) != ESP_OK) {
-    return false;
-  }
-  if (esp_ble_gap_config_adv_data(&s_adv_data)) {
-    LOG(LL_ERROR, ("Failed to set adv data"));
-    return false;
-  }
   esp_bd_addr_t local_addr;
   uint8_t addr_type;
   esp_ble_gap_get_local_used_addr(local_addr, &addr_type);
@@ -96,9 +95,12 @@ static bool start_advertising(void) {
   };
   memcpy(la.addr, local_addr, 6);
   char addr[BT_ADDR_STR_LEN];
-  LOG(LL_INFO, ("BT device name %s, addr %s", dev_name,
-                mgos_bt_addr_to_str(&la, MGOS_BT_ADDR_STRINGIFY_TYPE, addr)));
-  return true;
+  struct mg_str dev_name = mgos_bt_gap_get_name();
+  esp_err_t err = esp_ble_gap_start_advertising(&s_adv_params);
+  LOG(LL_INFO,
+      ("BT device name %.*s, addr %s err %d", (int) dev_name.len, dev_name.p,
+       mgos_bt_addr_to_str(&la, MGOS_BT_ADDR_STRINGIFY_TYPE, addr), err));
+  return (err == ESP_OK);
 }
 
 static bool stop_advertising(void) {
@@ -106,9 +108,14 @@ static bool stop_advertising(void) {
   return (esp_ble_gap_stop_advertising() == ESP_OK);
 }
 
-void mgos_bt_gap_set_scan_rsp_data(const struct mg_str scan_rsp_data) {
-  esp_ble_gap_config_scan_rsp_data_raw((uint8_t *) scan_rsp_data.p,
-                                       scan_rsp_data.len);
+bool mgos_bt_gap_set_adv_data(struct mg_str adv_data) {
+  return (esp_ble_gap_config_adv_data_raw((uint8_t *) adv_data.p,
+                                          adv_data.len) == ESP_OK);
+}
+
+bool mgos_bt_gap_set_scan_rsp_data(struct mg_str scan_rsp_data) {
+  return (esp_ble_gap_config_scan_rsp_data_raw((uint8_t *) scan_rsp_data.p,
+                                               scan_rsp_data.len) == ESP_OK);
 }
 
 bool mgos_bt_gap_get_adv_enable(void) {
@@ -232,7 +239,9 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
           mgos_event_trigger_schedule(MGOS_BT_GAP_EVENT_SCAN_STOP, NULL, 0);
           break;
         }
-        default: { LOG(LL_DEBUG, ("SCAN_RESULT search ev %d", p->search_evt)); }
+        default: {
+          LOG(LL_DEBUG, ("SCAN_RESULT search ev %d", p->search_evt));
+        }
       }
       break;
     }
@@ -249,9 +258,6 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
     case ESP_GAP_BLE_ADV_DATA_SET_COMPLETE_EVT: {
       const struct ble_adv_data_cmpl_evt_param *p = &ep->adv_data_cmpl;
       LOG(LL_DEBUG, ("ADV_DATA_SET_COMPLETE st %d", p->status));
-      if (s_adv_enable) {
-        esp_ble_gap_start_advertising(&s_adv_params);
-      }
       break;
     }
     case ESP_GAP_BLE_SCAN_RSP_DATA_SET_COMPLETE_EVT: {
@@ -341,6 +347,10 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
       if (p->status == ESP_BT_STATUS_SUCCESS) {
         s_advertising = false;
         LOG(LL_INFO, ("BLE advertising stopped"));
+        // If should be advertising, resatart immediately.
+        if (s_adv_enable) {
+          esp_ble_gap_start_advertising(&s_adv_params);
+        }
       }
       break;
     }
@@ -435,7 +445,7 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
 }
 
 static void adv_enable_cb(void *arg) {
-  mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
+  mgos_bt_gap_set_adv_enable(s_adv_enable);
   (void) arg;
 }
 
@@ -443,6 +453,14 @@ bool esp32_bt_gap_init(void) {
   if (esp_ble_gap_register_callback(esp32_gap_ev_handler) != ESP_OK) {
     return false;
   }
+
+  const char *dev_name = mgos_sys_config_get_bt_dev_name();
+  if (dev_name == NULL) dev_name = mgos_sys_config_get_device_id();
+  if (dev_name == NULL) {
+    LOG(LL_ERROR, ("bt.dev_name or device.id must be set"));
+    return false;
+  }
+  mgos_bt_gap_set_name(mg_mk_str(dev_name));
 
   struct mg_str scan_rsp_data_hex =
       mg_mk_str(mgos_sys_config_get_bt_scan_rsp_data_hex());
@@ -460,6 +478,12 @@ bool esp32_bt_gap_init(void) {
       }
       free((void *) scan_rsp_data.p);
     }
+    s_adv_data.set_scan_rsp = true;
+  }
+
+  if (esp_ble_gap_config_adv_data(&s_adv_data)) {
+    LOG(LL_ERROR, ("Failed to set adv data"));
+    return false;
   }
 
   mgos_bt_gap_set_pairing_enable(mgos_sys_config_get_bt_allow_pairing());
@@ -479,9 +503,10 @@ bool esp32_bt_gap_init(void) {
     s_adv_params.own_addr_type = BLE_ADDR_TYPE_PUBLIC;
   }
 
+  s_adv_enable = mgos_sys_config_get_bt_adv_enable();
   /* Delay until later, we've only just started the BT system and
    * sometimes this throws a "No random address yet" error. */
-  mgos_invoke_cb(adv_enable_cb, NULL, false /* from_isr */);
+  mgos_set_timer(100, 0, adv_enable_cb, NULL);
 
   return true;
 }

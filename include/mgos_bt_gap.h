@@ -84,6 +84,16 @@ struct mgos_bt_gap_scan_result {
 
 bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *);
 
+bool mgos_bt_gap_set_name(struct mg_str name);
+struct mg_str mgos_bt_gap_get_name(void);
+
+bool mgos_bt_gap_set_adv_data(struct mg_str scan_rsp_data);
+
+bool mgos_bt_gap_set_scan_rsp_data(struct mg_str scan_rsp_data);
+
+bool mgos_bt_gap_get_adv_enable(void);
+bool mgos_bt_gap_set_adv_enable(bool adv_enable);
+
 #ifdef __cplusplus
 }
 #endif

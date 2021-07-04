@@ -31,11 +31,6 @@ extern "C" {
 
 #define MGOS_BT_GAP_MAX_SCAN_RSP_DATA_LEN 31
 
-void mgos_bt_gap_set_scan_rsp_data(const struct mg_str scan_rsp_data);
-
-bool mgos_bt_gap_get_adv_enable(void);
-bool mgos_bt_gap_set_adv_enable(bool adv_enable);
-
 bool mgos_bt_gap_get_pairing_enable(void);
 bool mgos_bt_gap_set_pairing_enable(bool pairing_enable);
 
