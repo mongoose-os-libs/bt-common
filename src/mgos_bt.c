@@ -111,6 +111,14 @@ bool mgos_bt_uuid_from_str(const struct mg_str str, struct mgos_bt_uuid *uuid) {
   return result;
 }
 
+void mgos_bt_uuid128_from_bytes(const uint8_t *bytes, bool reverse,
+                                struct mgos_bt_uuid *uuid) {
+  uuid->len = 16;
+  for (int i = 0; i < 16; i++) {
+    uuid->uuid.uuid128[i] = bytes[reverse ? 15 - i : i];
+  }
+}
+
 int mgos_bt_uuid_cmp(const struct mgos_bt_uuid *a,
                      const struct mgos_bt_uuid *b) {
   int result = 0;
