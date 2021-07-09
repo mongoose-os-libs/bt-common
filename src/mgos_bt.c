@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
+#include "mgos_bt.h"
+
 #include <stdio.h>
 #include <string.h>
 
-#include "mgos_bt.h"
 #include "mgos_bt_gap.h"
 #include "mgos_bt_gattc.h"
 #include "mgos_system.h"
@@ -117,6 +118,12 @@ void mgos_bt_uuid128_from_bytes(const uint8_t *bytes, bool reverse,
   for (int i = 0; i < 16; i++) {
     uuid->uuid.uuid128[i] = bytes[reverse ? 15 - i : i];
   }
+}
+
+bool mgos_bt_uuid_eq(const struct mgos_bt_uuid *a,
+                     const struct mgos_bt_uuid *b) {
+  if (a->len != b->len) return false;
+  return (memcmp(a->uuid.uuid128, b->uuid.uuid128, a->len) == 0);
 }
 
 int mgos_bt_uuid_cmp(const struct mgos_bt_uuid *a,

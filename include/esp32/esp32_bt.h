@@ -36,13 +36,11 @@ extern "C" {
 #define MGOS_BT_ADDR_LEN 6
 
 const char *esp32_bt_addr_to_str(const esp_bd_addr_t addr, char *out);
-bool esp32_bt_addr_from_str(const struct mg_str addr_str, esp_bd_addr_t addr);
 int esp32_bt_addr_cmp(const esp_bd_addr_t a, const esp_bd_addr_t b);
-bool esp32_bt_addr_is_null(const esp_bd_addr_t addr);
-
 const char *esp32_bt_uuid_to_str(const esp_bt_uuid_t *uuid, char *out);
-bool esp32_bt_uuid_from_str(const struct mg_str uuid_str, esp_bt_uuid_t *uuid);
-int esp32_bt_uuid_cmp(const esp_bt_uuid_t *a, const esp_bt_uuid_t *b);
+
+void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, esp_bt_uuid_t *out);
+void esp32_bt_uuid_to_mgos(const esp_bt_uuid_t *in, struct mgos_bt_uuid *out);
 
 #ifdef __cplusplus
 }

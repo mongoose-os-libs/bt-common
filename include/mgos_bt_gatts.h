@@ -40,20 +40,22 @@ enum mgos_bt_gatts_ev {
 };
 
 struct mgos_bt_gatts_conn {
-  const struct mgos_bt_gatt_conn gc;
+  struct mgos_bt_uuid svc_uuid;
+  struct mgos_bt_gatt_conn gc;
   void *user_data; /* Opaque pointer for user. */
 };
 
 struct mgos_bt_gatts_read_arg {
-  struct mgos_bt_uuid uuid;
+  struct mgos_bt_uuid svc_uuid;
+  struct mgos_bt_uuid char_uuid;
   uint16_t handle;
   uint32_t trans_id;
   uint16_t offset;
-  uint16_t len;
 };
 
 struct mgos_bt_gatts_write_arg {
-  struct mgos_bt_uuid uuid;
+  struct mgos_bt_uuid svc_uuid;
+  struct mgos_bt_uuid char_uuid;
   uint16_t handle;
   uint32_t trans_id;
   uint16_t offset;
@@ -62,7 +64,8 @@ struct mgos_bt_gatts_write_arg {
 };
 
 struct mgos_bt_gatts_notify_mode_arg {
-  struct mgos_bt_uuid uuid;
+  struct mgos_bt_uuid svc_uuid;
+  struct mgos_bt_uuid char_uuid;
   uint16_t handle;
   enum mgos_bt_gatt_notify_mode mode;
 };
@@ -80,8 +83,13 @@ typedef enum mgos_bt_gatt_status (*mgos_bt_gatts_ev_handler_t)(
     void *handler_arg);
 
 struct mgos_bt_gatts_char_def {
-  const char *uuid;
-  uint8_t prop;
+  union {
+    const char *uuid;
+    struct mgos_bt_uuid uuid_bin;
+  };
+  uint32_t prop : 5;
+  uint32_t is_desc : 1;
+  uint32_t is_uuid_bin : 1;
   /* Separate event handler for the characteristic.
    * If not provided, connection handler will be used. */
   mgos_bt_gatts_ev_handler_t handler;
@@ -89,7 +97,7 @@ struct mgos_bt_gatts_char_def {
 };
 
 /*
- * Register a GATTS service.
+ * Registers and starts a GATTS service.
  * `uuid` specifies the service UUID (in string form, "1234" for 16 bit UUIDs,
  * "12345678-90ab-cdef-0123-456789abcdef" for 128-bit).
  * `sec_level` specifies the minimum required security level of the connection.
@@ -105,6 +113,11 @@ bool mgos_bt_gatts_register_service(const char *uuid,
                                     mgos_bt_gatts_ev_handler_t handler,
                                     void *handler_arg);
 
+/*
+ * Stops and unregisters a previously registered service.
+ */
+bool mgos_bt_gatts_unregister_service(const char *uuid);
+
 /* Note: sending mtu - 1 bytes will usually trigger "long reads" by the client:
  * the client will ask for more data (with offset). */
 void mgos_bt_gatts_send_resp_data(struct mgos_bt_gatts_conn *gsc,
@@ -115,7 +128,23 @@ void mgos_bt_gatts_notify(struct mgos_bt_gatts_conn *gsc,
                           enum mgos_bt_gatt_notify_mode mode, uint16_t handle,
                           struct mg_str data);
 
+void mgos_bt_gatts_notify_uuid(struct mgos_bt_gatts_conn *gsc,
+                               const struct mgos_bt_uuid *char_uuid,
+                               enum mgos_bt_gatt_notify_mode mode,
+                               struct mg_str data);
+
 bool mgos_bt_gatts_disconnect(struct mgos_bt_gatts_conn *gsc);
+
+/* Handlers that respond to reads with 1/2/4 bytes from the arg's value. */
+enum mgos_bt_gatt_status mgos_bt_gatts_read_1(struct mgos_bt_gatts_conn *c,
+                                              enum mgos_bt_gatts_ev ev,
+                                              void *ev_arg, void *handler_arg);
+enum mgos_bt_gatt_status mgos_bt_gatts_read_2(struct mgos_bt_gatts_conn *c,
+                                              enum mgos_bt_gatts_ev ev,
+                                              void *ev_arg, void *handler_arg);
+enum mgos_bt_gatt_status mgos_bt_gatts_read_4(struct mgos_bt_gatts_conn *c,
+                                              enum mgos_bt_gatts_ev ev,
+                                              void *ev_arg, void *handler_arg);
 
 #ifdef __cplusplus
 }

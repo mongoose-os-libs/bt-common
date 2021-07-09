@@ -69,6 +69,8 @@ bool mgos_bt_addr_is_null(const struct mgos_bt_addr *addr);
 
 const char *mgos_bt_uuid_to_str(const struct mgos_bt_uuid *uuid, char *out);
 bool mgos_bt_uuid_from_str(const struct mg_str str, struct mgos_bt_uuid *uuid);
+bool mgos_bt_uuid_eq(const struct mgos_bt_uuid *a,
+                     const struct mgos_bt_uuid *b);
 int mgos_bt_uuid_cmp(const struct mgos_bt_uuid *a,
                      const struct mgos_bt_uuid *b);
 void mgos_bt_uuid128_from_bytes(const uint8_t *bytes, bool reverse,

@@ -39,17 +39,9 @@ const char *esp32_bt_addr_to_str(const esp_bd_addr_t addr, char *out) {
   return mgos_bt_addr_to_str((const struct mgos_bt_addr *) &addr[0], 0, out);
 }
 
-bool esp32_bt_addr_from_str(const struct mg_str addr_str, esp_bd_addr_t addr) {
-  return mgos_bt_addr_from_str(addr_str, (struct mgos_bt_addr *) &addr[0]);
-}
-
 int esp32_bt_addr_cmp(const esp_bd_addr_t a, const esp_bd_addr_t b) {
   return mgos_bt_addr_cmp((const struct mgos_bt_addr *) &a[0],
                           (const struct mgos_bt_addr *) &b[0]);
-}
-
-bool esp32_bt_addr_is_null(const esp_bd_addr_t addr) {
-  return mgos_bt_addr_is_null((const struct mgos_bt_addr *) &addr[0]);
 }
 
 const char *bt_uuid128_to_str(const uint8_t *u, char *out) {
@@ -65,12 +57,14 @@ const char *esp32_bt_uuid_to_str(const esp_bt_uuid_t *uuid, char *out) {
   return mgos_bt_uuid_to_str((struct mgos_bt_uuid *) uuid, out);
 }
 
-bool esp32_bt_uuid_from_str(const struct mg_str uuid_str, esp_bt_uuid_t *uuid) {
-  return mgos_bt_uuid_from_str(uuid_str, (struct mgos_bt_uuid *) uuid);
+void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, esp_bt_uuid_t *out) {
+  out->len = in->len;
+  memcpy(out->uuid.uuid128, in->uuid.uuid128, 16);
 }
 
-int esp32_bt_uuid_cmp(const esp_bt_uuid_t *a, const esp_bt_uuid_t *b) {
-  return mgos_bt_uuid_cmp((struct mgos_bt_uuid *) a, (struct mgos_bt_uuid *) b);
+void esp32_bt_uuid_to_mgos(const esp_bt_uuid_t *in, struct mgos_bt_uuid *out) {
+  out->len = in->len;
+  memcpy(out->uuid.uuid128, in->uuid.uuid128, 16);
 }
 
 enum cs_log_level ll_from_status(esp_bt_status_t status) {

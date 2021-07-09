@@ -33,6 +33,7 @@ struct mgos_bt_gatt_conn {
 #define MGOS_BT_GATT_PROP_WRITE (1 << 1)
 #define MGOS_BT_GATT_PROP_NOTIFY (1 << 2)
 #define MGOS_BT_GATT_PROP_INDICATE (1 << 3)
+#define MGOS_BT_GATT_PROP_WRITE_NR (1 << 4)
 
 #define MGOS_BT_GATT_PROP_RWNI(r, w, n, i)                                    \
   (((r) ? MGOS_BT_GATT_PROP_READ : 0) | ((w) ? MGOS_BT_GATT_PROP_WRITE : 0) | \
