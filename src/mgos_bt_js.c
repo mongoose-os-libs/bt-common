@@ -145,15 +145,15 @@ const struct mjs_c_struct_member *mgos_bt_gattc_js_get_notify_arg_def(void) {
 }
 
 static const struct mjs_c_struct_member gatts_read_arg_def[] = {
-    {"uuid", offsetof(struct mgos_bt_gatts_read_arg, uuid),
+    {"svc_uuid", offsetof(struct mgos_bt_gatts_read_arg, svc_uuid),
+     MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
+    {"char_uuid", offsetof(struct mgos_bt_gatts_read_arg, char_uuid),
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
     {"handle", offsetof(struct mgos_bt_gatts_read_arg, handle),
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
     {"transId", offsetof(struct mgos_bt_gatts_read_arg, trans_id),
      MJS_STRUCT_FIELD_TYPE_INT, NULL},
     {"offset", offsetof(struct mgos_bt_gatts_read_arg, offset),
-     MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
-    {"len", offsetof(struct mgos_bt_gatts_read_arg, len),
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
     {NULL, 0, MJS_STRUCT_FIELD_TYPE_INVALID, NULL},
 };
@@ -163,7 +163,9 @@ const struct mjs_c_struct_member *mgos_bt_gatts_js_get_read_arg_def(void) {
 }
 
 static const struct mjs_c_struct_member gatts_write_arg_def[] = {
-    {"uuid", offsetof(struct mgos_bt_gatts_write_arg, uuid),
+    {"svc_uuid", offsetof(struct mgos_bt_gatts_read_arg, svc_uuid),
+     MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
+    {"char_uuid", offsetof(struct mgos_bt_gatts_read_arg, char_uuid),
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
     {"handle", offsetof(struct mgos_bt_gatts_write_arg, handle),
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
@@ -187,7 +189,9 @@ static mjs_val_t nm_to_int(struct mjs *mjs, void *ap) {
 }
 
 static const struct mjs_c_struct_member gatts_notify_mode_arg_def[] = {
-    {"uuid", offsetof(struct mgos_bt_gatts_notify_mode_arg, uuid),
+    {"svc_uuid", offsetof(struct mgos_bt_gatts_read_arg, svc_uuid),
+     MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
+    {"char_uuid", offsetof(struct mgos_bt_gatts_read_arg, char_uuid),
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
     {"handle", offsetof(struct mgos_bt_gatts_notify_mode_arg, handle),
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
