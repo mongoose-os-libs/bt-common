@@ -35,6 +35,12 @@ bool mgos_bt_gap_get_pairing_enable(void);
 bool mgos_bt_gap_set_pairing_enable(bool pairing_enable);
 
 int mgos_bt_gap_get_num_paired_devices(void);
+
+/*
+ * Return list of paired devices; the caller should free it.
+ */
+bool mgos_bt_gap_get_paired_device_list(int *dev_num, struct mgos_bt_addr *list);
+
 /*
  * These are actually async. TODO(rojer): Add callbacks to the API.
  * For now, just allow some time for the calls to complete.

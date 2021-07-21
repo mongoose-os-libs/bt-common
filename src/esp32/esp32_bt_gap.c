@@ -147,6 +147,25 @@ bool mgos_bt_gap_set_pairing_enable(bool pairing_enable) {
   }
 }
 
+bool mgos_bt_gap_get_paired_device_list(int *dev_num, struct mgos_bt_addr *list) {
+esp_ble_bond_dev_t *dev_list;
+bool rc = true;
+
+    if(*dev_num == 0)
+        return false;
+    if((dev_list = calloc(*dev_num, sizeof(esp_ble_bond_dev_t))) == NULL)
+        return false;
+    if(esp_ble_get_bond_device_list(dev_num, dev_list) == ESP_OK) {
+        for(int i=0; i<*dev_num; i++) {
+            memcpy(&list->addr, &dev_list[i].bd_addr, sizeof(esp_bd_addr_t));
+            list->type = MGOS_BT_ADDR_TYPE_NONE;
+            ++list;
+        }
+    } else rc = false;
+    free(dev_list);
+    return rc;
+}
+
 void mgos_bt_gap_remove_paired_device(const esp_bd_addr_t addr) {
   esp_ble_remove_bond_device((uint8_t *) addr);
 }
