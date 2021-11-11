@@ -22,18 +22,19 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
-#include "esp_bt.h"
-#include "esp_bt_defs.h"
-#include "esp_bt_main.h"
-#include "esp_gap_ble_api.h"
-#include "esp_gatt_common_api.h"
-#include "nvs.h"
-
 #include "common/mg_str.h"
 
 #include "mgos_hal.h"
 #include "mgos_net.h"
 #include "mgos_sys_config.h"
+
+#include "esp_nimble_hci.h"
+#include "host/ble_hs.h"
+#include "host/util/util.h"
+#include "nimble/nimble_port.h"
+#include "nimble/nimble_port_freertos.h"
+#include "services/gap/ble_svc_gap.h"
+
 
 const char *esp32_bt_addr_to_str(const esp_bd_addr_t addr, char *out) {
   return mgos_bt_addr_to_str((const struct mgos_bt_addr *) &addr[0], 0, out);
@@ -75,38 +76,67 @@ static void mgos_bt_net_ev(int ev, void *evd, void *arg) {
   if (ev != MGOS_NET_EV_IP_ACQUIRED) return;
   LOG(LL_INFO, ("Network is up, disabling Bluetooth"));
   mgos_sys_config_set_bt_enable(false);
+#if 0  // TODO
   char *msg = NULL;
   if (save_cfg(&mgos_sys_config, &msg)) {
     esp_bt_controller_disable();
     esp_bt_controller_deinit();
     esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
   }
+#endif
   (void) arg;
 }
 
 int mgos_bt_gap_get_num_paired_devices(void) {
-  return esp_ble_get_bond_device_num();
+  int count = 0;
+  ble_store_util_count(BLE_STORE_OBJ_TYPE_OUR_SEC, &count);
+  return count;
 }
 
-/* Workaround for https://github.com/espressif/esp-idf/issues/1406 */
 bool esp32_bt_wipe_config(void) {
-  bool result = false;
-  nvs_handle h = 0;
-  /* CONFIG_FILE_PATH form btc_config.c */
-  if (nvs_open("bt_config.conf", NVS_READWRITE, &h) != ESP_OK) goto clean;
-  if (nvs_erase_key(h, "bt_cfg_key") != ESP_OK) goto clean;
-  result = true;
-
-clean:
-  if (h != 0) nvs_close(h);
-  return result;
+  // TODO
+  return false;
 }
+
+static void _on_reset(int reason) {
+  LOG(LL_ERROR, ("Resetting state; reason=%d", reason));
+}
+
+static void _on_sync(void) {
+  int rc;
+
+  rc = ble_hs_util_ensure_addr(mgos_sys_config_get_bt_random_address());
+  if (rc != 0) {
+    LOG(LL_ERROR, ("ble_hs_util_ensure_addr rc=%d", rc));
+    return;
+  }
+
+  uint8_t own_addr_type;
+  rc = ble_hs_id_infer_auto(0, &own_addr_type);
+  if (rc != 0) {
+    LOG(LL_ERROR, ("error determining address type; rc=%d", rc));
+    return;
+  }
+
+  uint8_t addr_val[6] = {0};
+  rc = ble_hs_id_copy_addr(own_addr_type, addr_val, NULL);
+  char addr[18] = {0};
+  LOG(LL_INFO, ("BLE Device Address: %s", esp32_bt_addr_to_str(addr_val, addr)));
+
+  mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
+}
+
+static void ble_host_task(void *param) {
+  nimble_port_run();
+  nimble_port_freertos_deinit();
+}
+
+extern void ble_store_config_init(void);
 
 bool mgos_bt_common_init(void) {
   bool ret = false;
   if (!mgos_sys_config_get_bt_enable()) {
     LOG(LL_INFO, ("Bluetooth is disabled"));
-    esp_bt_controller_mem_release(ESP_BT_MODE_BTDM);
     return true;
   }
 
@@ -117,38 +147,32 @@ bool mgos_bt_common_init(void) {
     free(dev_name);
   }
 
-  esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
-
-  esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-  esp_err_t err = esp_bt_controller_init(&bt_cfg);
+  esp_err_t err = esp_nimble_hci_and_controller_init();
   if (err) {
     LOG(LL_ERROR, ("BT init failed: %d", err));
     goto out;
   }
-  err = esp_bt_controller_enable(ESP_BT_MODE_BLE);
-  if (err) {
-    LOG(LL_ERROR, ("BT enable failed: %d", err));
-    goto out;
-  }
-  err = esp_bluedroid_init();
-  if (err != ESP_OK) {
-    LOG(LL_ERROR, ("bluedroid init failed: %d", err));
-    goto out;
-  }
-  err = esp_bluedroid_enable();
-  if (err != ESP_OK) {
-    LOG(LL_ERROR, ("bluedroid enable failed: %d", err));
-    goto out;
-  }
+
+  nimble_port_init();
+
+  ble_hs_cfg.reset_cb = _on_reset;
+  ble_hs_cfg.sync_cb = _on_sync;
+  //ble_hs_cfg.gatts_register_cb = gatt_svr_register_cb;
+  ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
+
+  ble_hs_cfg.sm_sc = true;
+  ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
+  ble_hs_cfg.sm_bonding = mgos_sys_config_get_bt_allow_pairing();
+  ble_hs_cfg.sm_mitm = true;
+
+  ble_att_set_preferred_mtu(mgos_sys_config_get_bt_gatt_mtu());
 
   if (!esp32_bt_gap_init()) {
     LOG(LL_ERROR, ("GAP init failed"));
     ret = false;
     goto out;
   }
-
-  esp_ble_gatt_set_local_mtu(mgos_sys_config_get_bt_gatt_mtu());
-
+#if 0
   if (!esp32_bt_gattc_init()) {
     LOG(LL_ERROR, ("GATTC init failed"));
     ret = false;
@@ -160,10 +184,14 @@ bool mgos_bt_common_init(void) {
     ret = false;
     goto out;
   }
-
+#endif
   if (!mgos_sys_config_get_bt_keep_enabled()) {
     mgos_event_add_group_handler(MGOS_EVENT_GRP_NET, mgos_bt_net_ev, NULL);
   }
+
+  ble_store_config_init();
+
+  nimble_port_freertos_init(ble_host_task);
 
   LOG(LL_INFO, ("Bluetooth init ok, MTU %d, pairing %s, %d paired devices",
                 mgos_sys_config_get_bt_gatt_mtu(),

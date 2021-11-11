@@ -34,14 +34,6 @@ extern "C" {
 bool mgos_bt_gap_get_pairing_enable(void);
 bool mgos_bt_gap_set_pairing_enable(bool pairing_enable);
 
-int mgos_bt_gap_get_num_paired_devices(void);
-/*
- * These are actually async. TODO(rojer): Add callbacks to the API.
- * For now, just allow some time for the calls to complete.
- */
-void mgos_bt_gap_remove_paired_device(const esp_bd_addr_t addr);
-void mgos_bt_gap_remove_all_paired_devices(void);
-
 #ifdef __cplusplus
 }
 #endif

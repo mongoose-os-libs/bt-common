@@ -1,3 +1,4 @@
+#if 0
 /*
  * Copyright (c) 2014-2018 Cesanta Software Limited
  * All rights reserved
@@ -1315,3 +1316,4 @@ bool esp32_bt_gatts_init(void) {
   return (esp_ble_gatts_register_callback(esp32_bt_gatts_ev) == ESP_OK &&
           esp_ble_gatts_app_register(0) == ESP_OK);
 }
+#endif

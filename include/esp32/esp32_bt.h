@@ -19,8 +19,8 @@
 
 #include <stdlib.h>
 
-#include "esp_bt_defs.h"
-#include "esp_gatt_defs.h"
+//#include "esp_bt_defs.h"
+//#include "esp_gatt_defs.h"
 
 #include "common/mg_str.h"
 
@@ -35,9 +35,11 @@ extern "C" {
 
 #define MGOS_BT_ADDR_LEN 6
 
+/*
 const char *esp32_bt_addr_to_str(const esp_bd_addr_t addr, char *out);
 int esp32_bt_addr_cmp(const esp_bd_addr_t a, const esp_bd_addr_t b);
 const char *esp32_bt_uuid_to_str(const esp_bt_uuid_t *uuid, char *out);
+*/
 
 void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, esp_bt_uuid_t *out);
 void esp32_bt_uuid_to_mgos(const esp_bt_uuid_t *in, struct mgos_bt_uuid *out);

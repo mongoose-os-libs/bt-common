@@ -28,6 +28,27 @@ config_schema:
   - ["bt.gatts.min_sec_level", "i", 0, {title: "0 - no auth required, 1 - encryption reqd, 2 - encryption + MITM reqd"}]
   - ["bt.gatts.require_pairing", "b", false, {title: "Require device to be paired before accessing services"}]
 
+conds:
+  - when: mos.platform == "esp32"
+    apply:
+      build_vars:
+        ESP_IDF_EXTRA_COMPONENTS: "${build_vars.ESP_IDF_EXTRA_COMPONENTS} bt esp_wifi wpa_supplicant"
+        ESP_IDF_SDKCONFIG_OPTS: >
+          ${build_vars.ESP_IDF_SDKCONFIG_OPTS}
+          CONFIG_BT_ENABLED=y
+          CONFIG_BT_NIMBLE_ENABLED=y
+          CONFIG_BT_NIMBLE_ROLE_BROADCASTER=n
+          CONFIG_BT_NIMBLE_ROLE_OBSERVER=n
+          CONFIG_BT_NIMBLE_ROLE_CENTRAL=n
+          CONFIG_BT_NIMBLE_ROLE_PERIPHERAL=y
+          CONFIG_BT_NIMBLE_MAX_CONNECTIONS=7
+          CONFIG_BT_NIMBLE_DEBUG=n
+          CONFIG_BT_NIMBLE_TASK_STACK_SIZE=6144
+          CONFIG_BT_NIMBLE_L2CAP_COC_MAX_NUM=0
+          CONFIG_BT_NIMBLE_GAP_DEVICE_NAME_MAX_LEN=50
+
+#          CONFIG_BT_NIMBLE_CRYPTO_STACK_MBEDTLS=y
+
 tags:
   - bt
   - bluetooth

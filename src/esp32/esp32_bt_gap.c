@@ -17,14 +17,16 @@
 
 #include "esp32_bt_gap.h"
 
+#include "mgos.h"
+
+#include "host/ble_gap.h"
+#include "services/gap/ble_svc_gap.h"
+
+#if 0
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "esp_bt.h"
-#include "esp_bt_defs.h"
-#include "esp_bt_device.h"
-#include "esp_gap_ble_api.h"
 #include "nvs.h"
 
 #include "common/str_util.h"
@@ -38,9 +40,13 @@
 
 #include "esp32_bt_internal.h"
 
+<<<<<<< HEAD
 static struct mg_str s_name = MG_NULL_STR;
 static bool s_adv_enable = false;
 static bool s_advertising = false;
+
+=======
+>>>>>>> scratch
 static bool s_pairing_enable = false;
 static bool s_scanning = false;
 static int s_scan_duration_sec = 3;
@@ -74,6 +80,7 @@ bool esp32_bt_is_scanning(void) {
   return s_scanning;
 }
 
+<<<<<<< HEAD
 bool mgos_bt_gap_set_name(struct mg_str name) {
   mg_strfree(&s_name);
   s_name = mg_strdup_nul(name);
@@ -118,13 +125,10 @@ bool mgos_bt_gap_set_scan_rsp_data(struct mg_str scan_rsp_data) {
                                                scan_rsp_data.len) == ESP_OK);
 }
 
+=======
+>>>>>>> scratch
 bool mgos_bt_gap_get_adv_enable(void) {
   return s_adv_enable;
-}
-
-bool mgos_bt_gap_set_adv_enable(bool adv_enable) {
-  s_adv_enable = adv_enable;
-  return (s_adv_enable ? start_advertising() : stop_advertising());
 }
 
 void esp32_bt_set_is_advertising(bool is_advertising) {
@@ -443,14 +447,184 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
     }
   }
 }
+#endif
 
-static void adv_enable_cb(void *arg) {
-  mgos_bt_gap_set_adv_enable(s_adv_enable);
-  (void) arg;
+static int mgos_bt_gap_event(struct ble_gap_event *event, void *arg) {
+  struct ble_gap_conn_desc desc;
+  int rc;
+
+  switch (event->type) {
+    case BLE_GAP_EVENT_CONNECT:
+      LOG(LL_INFO, ("CONNECT %d %u", event->connect.status, event->connect.conn_handle));
+      if (event->connect.status == 0) {
+        rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
+        assert(rc == 0);
+        bleprph_print_conn_desc(&desc);
+      }
+      MODLOG_DFLT(INFO, "\n");
+
+      if (event->connect.status != 0) {
+        /* Connection failed; resume advertising. */
+        bleprph_advertise();
+      }
+      return 0;
+
+    case BLE_GAP_EVENT_DISCONNECT:
+      MODLOG_DFLT(INFO, "disconnect; reason=%d ", event->disconnect.reason);
+      bleprph_print_conn_desc(&event->disconnect.conn);
+      MODLOG_DFLT(INFO, "\n");
+
+      /* Connection terminated; resume advertising. */
+      bleprph_advertise();
+      return 0;
+
+    case BLE_GAP_EVENT_CONN_UPDATE:
+      /* The central has updated the connection parameters. */
+      MODLOG_DFLT(INFO, "connection updated; status=%d ",
+                  event->conn_update.status);
+      rc = ble_gap_conn_find(event->conn_update.conn_handle, &desc);
+      assert(rc == 0);
+      bleprph_print_conn_desc(&desc);
+      MODLOG_DFLT(INFO, "\n");
+      return 0;
+
+    case BLE_GAP_EVENT_ADV_COMPLETE:
+      MODLOG_DFLT(INFO, "advertise complete; reason=%d",
+                  event->adv_complete.reason);
+      bleprph_advertise();
+      return 0;
+
+    case BLE_GAP_EVENT_ENC_CHANGE:
+      /* Encryption has been enabled or disabled for this connection. */
+      MODLOG_DFLT(INFO, "encryption change event; status=%d ",
+                  event->enc_change.status);
+      rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
+      assert(rc == 0);
+      bleprph_print_conn_desc(&desc);
+      MODLOG_DFLT(INFO, "\n");
+      return 0;
+
+    case BLE_GAP_EVENT_SUBSCRIBE:
+      MODLOG_DFLT(INFO,
+                  "subscribe event; conn_handle=%d attr_handle=%d "
+                  "reason=%d prevn=%d curn=%d previ=%d curi=%d\n",
+                  event->subscribe.conn_handle, event->subscribe.attr_handle,
+                  event->subscribe.reason, event->subscribe.prev_notify,
+                  event->subscribe.cur_notify, event->subscribe.prev_indicate,
+                  event->subscribe.cur_indicate);
+      return 0;
+
+    case BLE_GAP_EVENT_MTU:
+      MODLOG_DFLT(INFO, "mtu update event; conn_handle=%d cid=%d mtu=%d\n",
+                  event->mtu.conn_handle, event->mtu.channel_id,
+                  event->mtu.value);
+      return 0;
+
+    case BLE_GAP_EVENT_REPEAT_PAIRING:
+      /* We already have a bond with the peer, but it is attempting to
+       * establish a new secure link.  This app sacrifices security for
+       * convenience: just throw away the old bond and accept the new link.
+       */
+
+      /* Delete the old bond. */
+      rc = ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc);
+      assert(rc == 0);
+      ble_store_util_delete_peer(&desc.peer_id_addr);
+
+      /* Return BLE_GAP_REPEAT_PAIRING_RETRY to indicate that the host should
+       * continue with the pairing operation.
+       */
+      return BLE_GAP_REPEAT_PAIRING_RETRY;
+
+    case BLE_GAP_EVENT_PASSKEY_ACTION:
+      ESP_LOGI(tag, "PASSKEY_ACTION_EVENT started \n");
+      struct ble_sm_io pkey = {0};
+      int key = 0;
+
+      if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
+        pkey.action = event->passkey.params.action;
+        pkey.passkey = 123456;  // This is the passkey to be entered on peer
+        ESP_LOGI(tag, "Enter passkey %d on the peer side", pkey.passkey);
+        rc = ble_sm_inject_io(event->passkey.conn_handle, &pkey);
+        ESP_LOGI(tag, "ble_sm_inject_io result: %d\n", rc);
+      } else if (event->passkey.params.action == BLE_SM_IOACT_NUMCMP) {
+        ESP_LOGI(tag, "Passkey on device's display: %d",
+                 event->passkey.params.numcmp);
+        ESP_LOGI(tag,
+                 "Accept or reject the passkey through console in this format "
+                 "-> key Y or key N");
+        pkey.action = event->passkey.params.action;
+        if (scli_receive_key(&key)) {
+          pkey.numcmp_accept = key;
+        } else {
+          pkey.numcmp_accept = 0;
+          ESP_LOGE(tag, "Timeout! Rejecting the key");
+        }
+        rc = ble_sm_inject_io(event->passkey.conn_handle, &pkey);
+        ESP_LOGI(tag, "ble_sm_inject_io result: %d\n", rc);
+      } else if (event->passkey.params.action == BLE_SM_IOACT_OOB) {
+        static uint8_t tem_oob[16] = {0};
+        pkey.action = event->passkey.params.action;
+        for (int i = 0; i < 16; i++) {
+          pkey.oob[i] = tem_oob[i];
+        }
+        rc = ble_sm_inject_io(event->passkey.conn_handle, &pkey);
+        ESP_LOGI(tag, "ble_sm_inject_io result: %d\n", rc);
+      } else if (event->passkey.params.action == BLE_SM_IOACT_INPUT) {
+        ESP_LOGI(
+            tag,
+            "Enter the passkey through console in this format-> key 123456");
+        pkey.action = event->passkey.params.action;
+        if (scli_receive_key(&key)) {
+          pkey.passkey = key;
+        } else {
+          pkey.passkey = 0;
+          ESP_LOGE(tag, "Timeout! Passing 0 as the key");
+        }
+        rc = ble_sm_inject_io(event->passkey.conn_handle, &pkey);
+        ESP_LOGI(tag, "ble_sm_inject_io result: %d\n", rc);
+      }
+      return 0;
+  }
+
+  return 0;
 }
 
-bool esp32_bt_gap_init(void) {
-  if (esp_ble_gap_register_callback(esp32_gap_ev_handler) != ESP_OK) {
+void mgos_bt_gap_set_scan_rsp_data(const struct mg_str scan_rsp_data) {
+  ble_gap_adv_rsp_set_data((const uint8_t *) scan_rsp_data.p,
+                           scan_rsp_data.len);
+}
+
+static bool s_adv_enable = false;
+static bool s_advertising = false;
+
+static bool start_advertising(void) {
+  int rc;
+
+  if (s_advertising) return true;
+  if (!s_adv_enable) return false;
+  const char *dev_name = mgos_sys_config_get_bt_dev_name();
+  if (dev_name == NULL) dev_name = mgos_sys_config_get_device_id();
+  if (dev_name == NULL) {
+    LOG(LL_ERROR, ("bt.dev_name or device.id must be set"));
+    return false;
+  }
+  if (ble_svc_gap_device_name_set(dev_name) != 0) {
+    return false;
+  }
+
+  struct ble_hs_adv_fields fields = {
+      .flags = 0,
+
+      .name = (uint8_t *) dev_name,
+      .name_len = strlen(dev_name),
+      .name_is_complete = true,
+
+      .tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO,
+      .tx_pwr_lvl_is_present = true,
+  };
+  if ((rc = ble_gap_adv_set_fields(&fields)) != 0) {
+    LOG(LL_ERROR, ("ble_gap_adv_set_fields: %d", rc));
     return false;
   }
 
@@ -486,6 +660,48 @@ bool esp32_bt_gap_init(void) {
     return false;
   }
 
+  struct ble_gap_adv_params adv_params = {
+      .conn_mode = BLE_GAP_CONN_MODE_UND,
+      .disc_mode = BLE_GAP_DISC_MODE_GEN,
+      .itvl_min = BLE_GAP_ADV_FAST_INTERVAL2_MIN,
+      .itvl_max = BLE_GAP_ADV_FAST_INTERVAL2_MAX,
+      .channel_map = BLE_GAP_ADV_DFLT_CHANNEL_MAP,
+  };
+  uint8_t own_addr_type;
+  if ((rc = ble_hs_id_infer_auto(0, &own_addr_type)) != 0) {
+    LOG(LL_ERROR, ("ble_hs_id_infer_auto: %d", rc));
+    return false;
+  }
+
+  if ((rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &adv_params,
+                              mgos_bt_gap_event, NULL)) != 0) {
+    LOG(LL_ERROR, ("ble_hs_id_infer_auto: %d", rc));
+    return false;
+  }
+
+  char addr[BT_ADDR_STR_LEN] = {0};
+  LOG(LL_INFO, ("BT device name %s, addr %s", dev_name, addr));
+  // mgos_bt_addr_to_str(&la, MGOS_BT_ADDR_STRINGIFY_TYPE, addr)));
+  return true;
+}
+
+static bool stop_advertising(void) {
+  if (!s_advertising) return true;
+  return (ble_gap_adv_stop() == 0);
+}
+
+bool mgos_bt_gap_set_adv_enable(bool adv_enable) {
+  s_adv_enable = adv_enable;
+  return (s_adv_enable ? start_advertising() : stop_advertising());
+}
+
+bool esp32_bt_gap_init(void) {
+#if 0
+  if (esp_ble_gap_register_callback(esp32_gap_ev_handler) != ESP_OK) {
+    return false;
+  }
+
+
   mgos_bt_gap_set_pairing_enable(mgos_sys_config_get_bt_allow_pairing());
 
   esp_ble_io_cap_t io_cap = ESP_IO_CAP_NONE;
@@ -494,7 +710,6 @@ bool esp32_bt_gap_init(void) {
   uint8_t key_size = 16;
   esp_ble_gap_set_security_param(ESP_BLE_SM_MAX_KEY_SIZE, &key_size,
                                  sizeof(key_size));
-
   if (mgos_sys_config_get_bt_random_address()) {
     esp_ble_gap_config_local_privacy(true);
     s_adv_params.own_addr_type = BLE_ADDR_TYPE_RANDOM;
@@ -507,6 +722,7 @@ bool esp32_bt_gap_init(void) {
   /* Delay until later, we've only just started the BT system and
    * sometimes this throws a "No random address yet" error. */
   mgos_set_timer(100, 0, adv_enable_cb, NULL);
+#endif
 
   return true;
 }
