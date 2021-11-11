@@ -96,7 +96,7 @@ bool mgos_bt_gap_set_adv_enable(bool adv_enable);
 
 int mgos_bt_gap_get_num_paired_devices(void);
 
-void mgos_bt_gap_remove_paired_device(const struct mgos_bt_addr addr);
+void mgos_bt_gap_remove_paired_device(const struct mgos_bt_addr *addr);
 
 void mgos_bt_gap_remove_all_paired_devices(void);
 

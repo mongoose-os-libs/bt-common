@@ -35,41 +35,60 @@
 #include "nimble/nimble_port_freertos.h"
 #include "services/gap/ble_svc_gap.h"
 
+uint8_t own_addr_type;
 
-const char *esp32_bt_addr_to_str(const esp_bd_addr_t addr, char *out) {
-  return mgos_bt_addr_to_str((const struct mgos_bt_addr *) &addr[0], 0, out);
+void mgos_bt_addr_to_esp32(const struct mgos_bt_addr *in, ble_addr_t *out) {
+  switch (in->type) {
+    case MGOS_BT_ADDR_TYPE_NONE:
+    case MGOS_BT_ADDR_TYPE_PUBLIC:
+      out->type = BLE_ADDR_PUBLIC;
+      break;
+    case MGOS_BT_ADDR_TYPE_RANDOM_STATIC:
+    case MGOS_BT_ADDR_TYPE_RANDOM_RESOLVABLE:
+    case MGOS_BT_ADDR_TYPE_RANDOM_NON_RESOLVABLE:
+      out->type = BLE_ADDR_RANDOM;
+      break;
+  }
+  out->val[0] = in->addr[5];
+  out->val[1] = in->addr[4];
+  out->val[2] = in->addr[3];
+  out->val[3] = in->addr[2];
+  out->val[4] = in->addr[1];
+  out->val[5] = in->addr[0];
 }
 
-int esp32_bt_addr_cmp(const esp_bd_addr_t a, const esp_bd_addr_t b) {
-  return mgos_bt_addr_cmp((const struct mgos_bt_addr *) &a[0],
-                          (const struct mgos_bt_addr *) &b[0]);
+void esp32_bt_addr_to_mgos(const ble_addr_t *in, struct mgos_bt_addr *out) {
+  out->type = MGOS_BT_ADDR_TYPE_NONE;
+  switch (in->type) {
+    case BLE_ADDR_PUBLIC:
+      out->type = MGOS_BT_ADDR_TYPE_PUBLIC;
+      break;
+    case BLE_ADDR_RANDOM:
+      if (BLE_ADDR_IS_STATIC(in)) {
+        out->type = MGOS_BT_ADDR_TYPE_RANDOM_STATIC;
+      } else if (BLE_ADDR_IS_RPA(in)) {
+        out->type = MGOS_BT_ADDR_TYPE_RANDOM_RESOLVABLE;
+      } else if (BLE_ADDR_IS_NRPA(in)) {
+        out->type = MGOS_BT_ADDR_TYPE_RANDOM_NON_RESOLVABLE;
+      }
+      break;
+  }
+  out->addr[0] = in->val[5];
+  out->addr[1] = in->val[4];
+  out->addr[2] = in->val[3];
+  out->addr[3] = in->val[2];
+  out->addr[4] = in->val[1];
+  out->addr[5] = in->val[0];
 }
 
-const char *bt_uuid128_to_str(const uint8_t *u, char *out) {
-  sprintf(out,
-          "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-"
-          "%02x%02x%02x%02x%02x%02x",
-          u[15], u[14], u[13], u[12], u[11], u[10], u[9], u[8], u[7], u[6],
-          u[5], u[4], u[3], u[2], u[1], u[0]);
-  return out;
+void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, ble_uuid_any_t *out) {
+  out->u.type = in->len * 8;
+  memcpy(out->u128.value, in->uuid.uuid128, 16);
 }
 
-const char *esp32_bt_uuid_to_str(const esp_bt_uuid_t *uuid, char *out) {
-  return mgos_bt_uuid_to_str((struct mgos_bt_uuid *) uuid, out);
-}
-
-void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, esp_bt_uuid_t *out) {
-  out->len = in->len;
-  memcpy(out->uuid.uuid128, in->uuid.uuid128, 16);
-}
-
-void esp32_bt_uuid_to_mgos(const esp_bt_uuid_t *in, struct mgos_bt_uuid *out) {
-  out->len = in->len;
-  memcpy(out->uuid.uuid128, in->uuid.uuid128, 16);
-}
-
-enum cs_log_level ll_from_status(esp_bt_status_t status) {
-  return (status == ESP_BT_STATUS_SUCCESS ? LL_DEBUG : LL_ERROR);
+void esp32_bt_uuid_to_mgos(const ble_uuid_any_t *in, struct mgos_bt_uuid *out) {
+  out->len = in->u.type / 8;
+  memcpy(out->uuid.uuid128, in->u128.value, 16);
 }
 
 static void mgos_bt_net_ev(int ev, void *evd, void *arg) {
@@ -87,12 +106,6 @@ static void mgos_bt_net_ev(int ev, void *evd, void *arg) {
   (void) arg;
 }
 
-int mgos_bt_gap_get_num_paired_devices(void) {
-  int count = 0;
-  ble_store_util_count(BLE_STORE_OBJ_TYPE_OUR_SEC, &count);
-  return count;
-}
-
 bool esp32_bt_wipe_config(void) {
   // TODO
   return false;
@@ -105,23 +118,43 @@ static void _on_reset(int reason) {
 static void _on_sync(void) {
   int rc;
 
-  rc = ble_hs_util_ensure_addr(mgos_sys_config_get_bt_random_address());
+  bool privacy = mgos_sys_config_get_bt_random_address();
+
+  rc = ble_hs_util_ensure_addr(privacy);
   if (rc != 0) {
     LOG(LL_ERROR, ("ble_hs_util_ensure_addr rc=%d", rc));
     return;
   }
 
-  uint8_t own_addr_type;
-  rc = ble_hs_id_infer_auto(0, &own_addr_type);
+  rc = ble_hs_id_infer_auto(privacy, &own_addr_type);
   if (rc != 0) {
     LOG(LL_ERROR, ("error determining address type; rc=%d", rc));
     return;
   }
 
-  uint8_t addr_val[6] = {0};
-  rc = ble_hs_id_copy_addr(own_addr_type, addr_val, NULL);
-  char addr[18] = {0};
-  LOG(LL_INFO, ("BLE Device Address: %s", esp32_bt_addr_to_str(addr_val, addr)));
+  ble_addr_t addr = {0};
+  int is_nrpa = false;
+  rc = ble_hs_id_copy_addr(own_addr_type, addr.val, &is_nrpa);
+  if (rc != 0) {
+    LOG(LL_ERROR, ("BLE addr error %d", rc));
+    return;
+  }
+  switch (own_addr_type) {
+    case BLE_OWN_ADDR_PUBLIC:
+      addr.type = BLE_ADDR_PUBLIC;
+      break;
+    case BLE_OWN_ADDR_RANDOM:
+    case BLE_OWN_ADDR_RPA_RANDOM_DEFAULT:
+    case BLE_OWN_ADDR_RPA_PUBLIC_DEFAULT:
+      addr.type = BLE_ADDR_RANDOM;
+      break;
+  }
+  struct mgos_bt_addr maddr = {0};
+  esp32_bt_addr_to_mgos(&addr, &maddr);
+  char addr_str[18] = {0};
+  LOG(LL_INFO,
+      ("BLE Device Address: %s",
+       mgos_bt_addr_to_str(&maddr, MGOS_BT_ADDR_STRINGIFY_TYPE, addr_str)));
 
   mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
 }
@@ -157,7 +190,7 @@ bool mgos_bt_common_init(void) {
 
   ble_hs_cfg.reset_cb = _on_reset;
   ble_hs_cfg.sync_cb = _on_sync;
-  //ble_hs_cfg.gatts_register_cb = gatt_svr_register_cb;
+  // ble_hs_cfg.gatts_register_cb = gatt_svr_register_cb;
   ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
   ble_hs_cfg.sm_sc = true;
@@ -190,6 +223,8 @@ bool mgos_bt_common_init(void) {
   }
 
   ble_store_config_init();
+
+  ble_att_set_preferred_mtu(mgos_sys_config_get_bt_gatt_mtu());
 
   nimble_port_freertos_init(ble_host_task);
 

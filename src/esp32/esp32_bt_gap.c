@@ -125,18 +125,12 @@ bool mgos_bt_gap_set_scan_rsp_data(struct mg_str scan_rsp_data) {
                                                scan_rsp_data.len) == ESP_OK);
 }
 
-=======
->>>>>>> scratch
 bool mgos_bt_gap_get_adv_enable(void) {
   return s_adv_enable;
 }
 
 void esp32_bt_set_is_advertising(bool is_advertising) {
   s_advertising = is_advertising;
-}
-
-bool mgos_bt_gap_get_pairing_enable(void) {
-  return s_pairing_enable;
 }
 
 bool mgos_bt_gap_set_pairing_enable(bool pairing_enable) {
@@ -150,47 +144,145 @@ bool mgos_bt_gap_set_pairing_enable(bool pairing_enable) {
     return false;
   }
 }
+#endif
 
-void mgos_bt_gap_remove_paired_device(const esp_bd_addr_t addr) {
-  esp_ble_remove_bond_device((uint8_t *) addr);
+bool mgos_bt_gap_get_pairing_enable(void) {
+  return ble_hs_cfg.sm_bonding;
+}
+
+int mgos_bt_gap_get_num_paired_devices(void) {
+  int count = 0;
+  ble_store_util_count(BLE_STORE_OBJ_TYPE_OUR_SEC, &count);
+  return count;
+}
+
+void mgos_bt_gap_remove_paired_device(const struct mgos_bt_addr *addr) {
+  // TODO
+  (void) addr;
 }
 
 void mgos_bt_gap_remove_all_paired_devices(void) {
-  int num = esp_ble_get_bond_device_num();
-  esp_ble_bond_dev_t *list = (esp_ble_bond_dev_t *) calloc(num, sizeof(*list));
-  if (list != NULL && esp_ble_get_bond_device_list(&num, list) == ESP_OK) {
-    for (int i = 0; i < num; i++) {
-      mgos_bt_gap_remove_paired_device(list[i].bd_addr);
+  ble_store_clear();
+}
+
+struct mgos_bt_scan_result_entry {
+  int64_t ts;
+  struct mgos_bt_gap_scan_result arg;
+  SLIST_ENTRY(mgos_bt_scan_result_entry) next;
+};
+SLIST_HEAD(mgos_bt_scan_result_list, mgos_bt_scan_result_entry);
+struct mgos_bt_scan_ctx {
+  bool active;
+  struct mgos_bt_scan_result_list results;
+};
+
+#define SCAN_RSP_WAIT_MICROS 1000000
+
+static void check_pending_results(struct mgos_bt_scan_ctx *ctx, int64_t now, const struct mgos_bt_addr *addr, const struct mg_str *scan_rsp) {
+  if (SLIST_EMPTY(&ctx->results)) return;
+  struct mgos_bt_scan_result_entry *re = NULL, *ret = NULL;
+  SLIST_FOREACH_SAFE(re, &ctx->results, next, ret) {
+    if (addr != NULL && mgos_bt_addr_cmp(&re->arg.addr, addr) == 0) {
+      re->arg.scan_rsp = mg_strdup(*scan_rsp);
+    } else if (now - re->ts < SCAN_RSP_WAIT_MICROS) {
+      continue;
+    }
+    SLIST_REMOVE(&ctx->results, re, mgos_bt_scan_result_entry, next);
+    mgos_event_trigger_schedule(MGOS_BT_GAP_EVENT_SCAN_RESULT, &re->arg, sizeof(re->arg));
+    free(re);
+  }
+}
+
+static int mgos_bt_scan_event_fn(struct ble_gap_event *ev, void *arg) {
+  struct mgos_bt_scan_ctx *ctx = arg;
+  switch (ev->type) {
+    case BLE_GAP_EVENT_DISC: {
+      char addr[18];
+      struct mgos_bt_gap_scan_result arg = {
+        .rssi = ev->disc.rssi,
+      };
+      esp32_bt_addr_to_mgos(&ev->disc.addr, &arg.addr);
+      if (ev->disc.event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND) {
+        arg.adv_data = mg_strdup(mg_mk_str_n((char *) ev->disc.data, ev->disc.length_data));
+      }
+      LOG(LL_DEBUG, ("DEVT addr %s %d rssi %d dl %d",
+            mgos_bt_addr_to_str(&arg.addr, MGOS_BT_ADDR_STRINGIFY_TYPE, addr),
+            ev->disc.event_type,
+            arg.rssi,
+            ev->disc.length_data));
+      if (!ctx->active) {
+        if (ev->disc.event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND) {
+          mgos_event_trigger_schedule(MGOS_BT_GAP_EVENT_SCAN_RESULT, &arg, sizeof(arg));
+        }
+        break;
+      }
+      // Active scan delivers advertising data first, then scan response.
+      // We need to wait until that event arrives before delivering ours.
+      if (ev->disc.event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND) {
+        struct mgos_bt_scan_result_entry *re = NULL;
+        SLIST_FOREACH(re, &ctx->results, next) {
+          if (mgos_bt_addr_cmp(&re->arg.addr, &arg.addr) == 0) break;
+        }
+        if (re == NULL) {
+          re = calloc(1, sizeof(*re));
+          if (re == NULL) {
+            mg_strfree(&arg.adv_data);
+            break;
+          }
+          SLIST_INSERT_HEAD(&ctx->results, re, next);
+        } else {
+          mg_strfree(&re->arg.adv_data);
+        }
+        re->ts = mgos_uptime_micros();
+        re->arg = arg;
+      } else if (ev->disc.event_type == BLE_HCI_ADV_RPT_EVTYPE_SCAN_RSP) {
+        struct mg_str scan_rsp = mg_mk_str_n((char *) ev->disc.data, ev->disc.length_data);
+        check_pending_results(ctx, mgos_uptime_micros(), &arg.addr, &scan_rsp);
+      } else {
+        check_pending_results(ctx, mgos_uptime_micros(), NULL, NULL);
+      }
+      break;
+    }
+    case BLE_GAP_EVENT_DISC_COMPLETE: {
+      // Flush the pending result list.
+      check_pending_results(ctx, mgos_uptime_micros() + SCAN_RSP_WAIT_MICROS, NULL, NULL);
+      mgos_event_trigger_schedule(MGOS_BT_GAP_EVENT_SCAN_STOP, NULL, 0);
+      free(ctx);
+      break;
     }
   }
-  free(list);
+  return 0;
+  (void) arg;
 }
 
 bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *opts) {
-  esp_ble_scan_params_t params = {
-      .scan_type =
-          (opts->active ? BLE_SCAN_TYPE_ACTIVE : BLE_SCAN_TYPE_PASSIVE),
-      .own_addr_type =
-          (mgos_sys_config_get_bt_random_address() ? BLE_ADDR_TYPE_RANDOM
-                                                   : BLE_ADDR_TYPE_PUBLIC),
-      .scan_filter_policy = BLE_SCAN_FILTER_ALLOW_ALL,
-      .scan_interval = MGOS_BT_GAP_DEFAULT_SCAN_INTERVAL_MS / 0.625,
-      .scan_window = MGOS_BT_GAP_DEFAULT_SCAN_WINDOW_MS / 0.625,
+  struct mgos_bt_scan_ctx *ctx = calloc(1, sizeof(*ctx));
+  if (ctx == NULL) return false;
+  struct ble_gap_disc_params params = {
+    .itvl = MGOS_BT_GAP_DEFAULT_SCAN_INTERVAL_MS / 0.625,
+    .window = MGOS_BT_GAP_DEFAULT_SCAN_WINDOW_MS / 0.625,
+    .filter_policy = BLE_HCI_SCAN_FILT_NO_WL,
+    .limited = false,
+    .passive = !opts->active,
+    .filter_duplicates = false,
   };
-  s_scan_duration_sec = opts->duration_ms / 1000 + 1;
-  if (esp_ble_gap_set_scan_params(&params) == ESP_OK) {
+  ctx->active = opts->active;
+  SLIST_INIT(&ctx->results);
+  int rc = ble_gap_disc(own_addr_type, opts->duration_ms, &params, mgos_bt_scan_event_fn, ctx);
+  if (rc == 0) {
     LOG(LL_DEBUG,
-        ("Starting scan (%s, %d/%d)",
-         (params.scan_type == BLE_SCAN_TYPE_ACTIVE ? "active" : "passive"),
-         params.scan_window, params.scan_interval));
-    s_scanning = true;
+        ("Starting scan (%s, %d ms %d/%d w/i)",
+         (params.passive ? "passive" : "active"),
+         opts->duration_ms, params.window, params.itvl));
     return true;
   } else {
-    LOG(LL_ERROR, ("Scan already in progress"));
+    LOG(LL_ERROR, ("Failed to start scan (%d)", rc));
+    free(ctx);
     return false;
   }
 }
 
+#if 0
 static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
                                  esp_ble_gap_cb_param_t *ep) {
   char buf[BT_UUID_STR_LEN];
@@ -450,6 +542,8 @@ static void esp32_gap_ev_handler(esp_gap_ble_cb_event_t ev,
 #endif
 
 static int mgos_bt_gap_event(struct ble_gap_event *event, void *arg) {
+  LOG(LL_INFO, ("EVent %d", event->type));
+#if 0
   struct ble_gap_conn_desc desc;
   int rc;
 
@@ -459,7 +553,7 @@ static int mgos_bt_gap_event(struct ble_gap_event *event, void *arg) {
       if (event->connect.status == 0) {
         rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
         assert(rc == 0);
-        bleprph_print_conn_desc(&desc);
+        //bleprph_print_conn_desc(&desc);
       }
       MODLOG_DFLT(INFO, "\n");
 
@@ -586,13 +680,13 @@ static int mgos_bt_gap_event(struct ble_gap_event *event, void *arg) {
       }
       return 0;
   }
-
+#endif
   return 0;
 }
 
-void mgos_bt_gap_set_scan_rsp_data(const struct mg_str scan_rsp_data) {
-  ble_gap_adv_rsp_set_data((const uint8_t *) scan_rsp_data.p,
-                           scan_rsp_data.len);
+bool mgos_bt_gap_set_scan_rsp_data(struct mg_str scan_rsp_data) {
+  return (ble_gap_adv_rsp_set_data((const uint8_t *) scan_rsp_data.p,
+                           scan_rsp_data.len) == 0);
 }
 
 static bool s_adv_enable = false;
@@ -628,14 +722,6 @@ static bool start_advertising(void) {
     return false;
   }
 
-  const char *dev_name = mgos_sys_config_get_bt_dev_name();
-  if (dev_name == NULL) dev_name = mgos_sys_config_get_device_id();
-  if (dev_name == NULL) {
-    LOG(LL_ERROR, ("bt.dev_name or device.id must be set"));
-    return false;
-  }
-  mgos_bt_gap_set_name(mg_mk_str(dev_name));
-
   struct mg_str scan_rsp_data_hex =
       mg_mk_str(mgos_sys_config_get_bt_scan_rsp_data_hex());
   if (scan_rsp_data_hex.len > 0) {
@@ -652,12 +738,6 @@ static bool start_advertising(void) {
       }
       free((void *) scan_rsp_data.p);
     }
-    s_adv_data.set_scan_rsp = true;
-  }
-
-  if (esp_ble_gap_config_adv_data(&s_adv_data)) {
-    LOG(LL_ERROR, ("Failed to set adv data"));
-    return false;
   }
 
   struct ble_gap_adv_params adv_params = {
@@ -667,7 +747,6 @@ static bool start_advertising(void) {
       .itvl_max = BLE_GAP_ADV_FAST_INTERVAL2_MAX,
       .channel_map = BLE_GAP_ADV_DFLT_CHANNEL_MAP,
   };
-  uint8_t own_addr_type;
   if ((rc = ble_hs_id_infer_auto(0, &own_addr_type)) != 0) {
     LOG(LL_ERROR, ("ble_hs_id_infer_auto: %d", rc));
     return false;

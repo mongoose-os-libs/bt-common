@@ -17,14 +17,10 @@
 
 #pragma once
 
-#include <stdlib.h>
-
-//#include "esp_bt_defs.h"
-//#include "esp_gatt_defs.h"
-
-#include "common/mg_str.h"
-
 #include "mgos_bt.h"
+
+#include "host/ble_uuid.h"
+#include "nimble/ble.h"
 
 #define MGOS_BT_DEV_NAME_LEN 32
 #define BT_UUID_STR_LEN (ESP_UUID_LEN_128 * 2 + ESP_UUID_LEN_128)
@@ -35,14 +31,13 @@ extern "C" {
 
 #define MGOS_BT_ADDR_LEN 6
 
-/*
-const char *esp32_bt_addr_to_str(const esp_bd_addr_t addr, char *out);
-int esp32_bt_addr_cmp(const esp_bd_addr_t a, const esp_bd_addr_t b);
-const char *esp32_bt_uuid_to_str(const esp_bt_uuid_t *uuid, char *out);
-*/
+void mgos_bt_addr_to_esp32(const struct mgos_bt_addr *in, ble_addr_t *out);
+void esp32_bt_addr_to_mgos(const ble_addr_t *in, struct mgos_bt_addr *out);
 
-void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, esp_bt_uuid_t *out);
-void esp32_bt_uuid_to_mgos(const esp_bt_uuid_t *in, struct mgos_bt_uuid *out);
+void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, ble_uuid_any_t *out);
+void esp32_bt_uuid_to_mgos(const ble_uuid_any_t *in, struct mgos_bt_uuid *out);
+
+extern uint8_t own_addr_type;
 
 #ifdef __cplusplus
 }

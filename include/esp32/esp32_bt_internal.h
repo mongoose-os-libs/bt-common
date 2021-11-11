@@ -27,21 +27,15 @@
 extern "C" {
 #endif
 
-// enum cs_log_level ll_from_status(esp_bt_status_t status);
-const char *esp32_bt_addr_to_str(const uint8_t *addr, char *out);
-
 bool esp32_bt_is_scanning(void);
 bool esp32_bt_gattc_init(void);
 
 bool esp32_bt_gap_init(void);
 bool esp32_bt_gatts_init(void);
-//void esp32_bt_gatts_auth_cmpl(const esp_bd_addr_t addr, bool success);
 
 void esp32_bt_set_is_advertising(bool is_advertising);
 
 bool esp32_bt_wipe_config(void);
-
-//esp_gatt_status_t esp32_bt_gatt_get_status(enum mgos_bt_gatt_status st);
 
 #ifdef __cplusplus
 }

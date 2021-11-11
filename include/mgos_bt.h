@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-#ifndef CS_MOS_LIBS_BT_COMMON_INCLUDE_MGOS_BT_H_
-#define CS_MOS_LIBS_BT_COMMON_INCLUDE_MGOS_BT_H_
+#pragma once
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -41,15 +40,14 @@ struct mgos_bt_addr {
   enum mgos_bt_addr_type type;
 };
 
-/* Binary-equivalent to the ESP32 esp_bt_uuid_t */
 struct mgos_bt_uuid {
-  uint16_t len;
   union {
     uint16_t uuid16;
     uint32_t uuid32;
     uint8_t uuid128[16];
   } uuid;
-} __attribute__((packed));
+  uint8_t len;
+};
 
 /* Each byte is transformed into 3 bytes: "XX:", and last byte into "XX\0" */
 #define MGOS_BT_ADDR_STR_LEN (sizeof(struct mgos_bt_addr) * 3 + 2 /* type */)
@@ -81,5 +79,3 @@ void mgos_event_trigger_schedule(int ev, const void *ev_data, size_t data_len);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* CS_MOS_LIBS_BT_COMMON_INCLUDE_MGOS_BT_H_ */

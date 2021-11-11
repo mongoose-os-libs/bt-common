@@ -28,7 +28,7 @@ const char *mgos_bt_addr_to_str(const struct mgos_bt_addr *addr, uint32_t flags,
                                 char *out) {
   sprintf(out, "%02x:%02x:%02x:%02x:%02x:%02x", addr->addr[0], addr->addr[1],
           addr->addr[2], addr->addr[3], addr->addr[4], addr->addr[5]);
-  if (flags & MGOS_BT_ADDR_STRINGIFY_TYPE && (addr->type & 7) != 0) {
+  if ((flags & MGOS_BT_ADDR_STRINGIFY_TYPE) && (addr->type & 7) != 0) {
     sprintf(out + 17, ",%d", (addr->type & 7));
   }
   return out;
@@ -170,14 +170,14 @@ static void trigger_cb(void *arg) {
   mgos_event_trigger(ei->ev, ev_data);
   if (ei->ev == MGOS_BT_GATTC_EV_READ_RESULT) {
     struct mgos_bt_gattc_read_result *p = ev_data;
-    free((void *) p->data.p);
+    mg_strfree(&p->data);
   } else if (ei->ev == MGOS_BT_GATTC_EV_NOTIFY) {
     struct mgos_bt_gattc_notify_arg *p = ev_data;
-    free((void *) p->data.p);
+    mg_strfree(&p->data);
   } else if (ei->ev == MGOS_BT_GAP_EVENT_SCAN_RESULT) {
     struct mgos_bt_gap_scan_result *p = ev_data;
-    free((void *) p->adv_data.p);
-    free((void *) p->scan_rsp.p);
+    mg_strfree(&p->adv_data);
+    mg_strfree(&p->scan_rsp);
   }
   free(ei);
 }
