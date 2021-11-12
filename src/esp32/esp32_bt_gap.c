@@ -22,6 +22,8 @@
 #include "host/ble_gap.h"
 #include "services/gap/ble_svc_gap.h"
 
+#include "esp32_bt_internal.h"
+
 static bool s_adv_enable = false;
 static bool s_advertising = false;
 
@@ -36,8 +38,9 @@ int mgos_bt_gap_get_num_paired_devices(void) {
 }
 
 void mgos_bt_gap_remove_paired_device(const struct mgos_bt_addr *addr) {
-  // TODO
-  (void) addr;
+  ble_addr_t baddr;
+  mgos_bt_addr_to_esp32(addr, &baddr);
+  ble_gap_unpair(&baddr);
 }
 
 void mgos_bt_gap_remove_all_paired_devices(void) {
@@ -168,9 +171,10 @@ bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *opts) {
   }
 }
 
-static int mgos_bt_gap_event(struct ble_gap_event *event, void *arg) {
-  LOG(LL_DEBUG, ("GAP Event %d", event->type));
-  switch (event->type) {
+static int esp32_bt_gap_event(struct ble_gap_event *ev, void *arg) {
+  LOG(LL_DEBUG, ("GAP Event %d", ev->type));
+  switch (ev->type) {
+    // Forward GATTS events to the GATTS handler.
     case BLE_GAP_EVENT_CONNECT:
       // Connect disables advertising. Resume, if it's enabled.
       s_advertising = false;
@@ -178,7 +182,31 @@ static int mgos_bt_gap_event(struct ble_gap_event *event, void *arg) {
       // fallthrough
     case BLE_GAP_EVENT_DISCONNECT:
     case BLE_GAP_EVENT_CONN_UPDATE:
+    case BLE_GAP_EVENT_ENC_CHANGE:
+    case BLE_GAP_EVENT_SUBSCRIBE:
+    case BLE_GAP_EVENT_MTU:
+    case BLE_GAP_EVENT_NOTIFY_TX:
+      esp32_bt_gatts_event(ev, arg);
       break;
+    case BLE_GAP_EVENT_ADV_COMPLETE:
+      s_advertising = false;
+      mgos_bt_gap_set_adv_enable(mgos_bt_gap_get_adv_enable());
+      break;
+    case BLE_GAP_EVENT_PASSKEY_ACTION:
+      // TODO
+      break;
+    case BLE_GAP_EVENT_REPEAT_PAIRING: {
+      // We already have a bond with the peer, but it is attempting to
+      // establish a new secure link.  This app sacrifices security for
+      // convenience: just throw away the old bond and accept the new link.
+      struct ble_gap_conn_desc desc;
+      if (ble_gap_conn_find(ev->repeat_pairing.conn_handle, &desc) == 0) {
+        ble_store_util_delete_peer(&desc.peer_id_addr);
+      }
+      // Return BLE_GAP_REPEAT_PAIRING_RETRY to indicate that the host should
+      // continue with the pairing operation.
+      return BLE_GAP_REPEAT_PAIRING_RETRY;
+    }
   }
 #if 0
   struct ble_gap_conn_desc desc;
@@ -387,7 +415,7 @@ static bool start_advertising(void) {
   }
 
   if ((rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &adv_params,
-                              mgos_bt_gap_event, NULL)) != 0) {
+                              esp32_bt_gap_event, NULL)) != 0) {
     LOG(LL_ERROR, ("ble_hs_id_infer_auto: %d", rc));
     return false;
   }
@@ -417,6 +445,5 @@ bool mgos_bt_gap_set_adv_enable(bool adv_enable) {
 }
 
 bool esp32_bt_gap_init(void) {
-  mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
   return true;
 }

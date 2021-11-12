@@ -36,6 +36,7 @@ void esp32_bt_addr_to_mgos(const ble_addr_t *in, struct mgos_bt_addr *out);
 
 void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, ble_uuid_any_t *out);
 void esp32_bt_uuid_to_mgos(const ble_uuid_any_t *in, struct mgos_bt_uuid *out);
+const char *esp32_bt_uuid_to_str(const ble_uuid_t *uuid, char *out);
 
 extern uint8_t own_addr_type;
 

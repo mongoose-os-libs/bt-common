@@ -35,6 +35,9 @@ bool esp32_bt_gatts_init(void);
 
 void esp32_bt_set_is_advertising(bool is_advertising);
 
+struct ble_gap_event;
+int esp32_bt_gatts_event(const struct ble_gap_event *event, void *arg);
+
 #ifdef __cplusplus
 }
 #endif

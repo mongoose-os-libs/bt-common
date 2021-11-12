@@ -1,4 +1,3 @@
-#if 0
 /*
  * Copyright (c) 2014-2018 Cesanta Software Limited
  * All rights reserved
@@ -22,18 +21,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "esp_bt.h"
-#include "esp_bt_defs.h"
-#include "esp_gap_ble_api.h"
-#include "esp_gatt_common_api.h"
-#include "esp_gatts_api.h"
+#include "mgos.h"
 
-#include "common/cs_dbg.h"
-#include "common/mbuf.h"
-#include "common/queue.h"
-
-#include "mgos_hal.h"
-#include "mgos_sys_config.h"
+#include "host/ble_gap.h"
+#include "host/ble_gatt.h"
+#include "host/ble_hs.h"
 
 #include "esp32_bt_gap.h"
 #include "esp32_bt_internal.h"
@@ -46,20 +38,24 @@ struct esp32_bt_service_attr_info;
 
 struct esp32_bt_gatts_service_entry {
   struct mgos_bt_uuid uuid;
+  uint16_t svc_handle;
   struct esp32_bt_service_attr_info *attrs;
   uint16_t num_attrs;
-  uint16_t num_cccds;
-  uint16_t num_attrs_registered;
-  uint16_t svc_handle;
   enum mgos_bt_gatt_sec_level sec_level;
   uint8_t deleting : 1;
   mgos_bt_gatts_ev_handler_t handler;
   void *handler_arg;
+  // NimBLE variants of UUID, characteristic and descriptor definitions.
+  ble_uuid_any_t ble_uuid;
+  struct ble_gatt_chr_def *ble_chars;
+  struct ble_gatt_dsc_def *ble_descrs;
+  struct ble_gatt_svc_def ble_svc_def[2];
   SLIST_ENTRY(esp32_bt_gatts_service_entry) next;
 };
 
 struct esp32_bt_service_attr_info {
   struct mgos_bt_gatts_char_def def;
+  ble_uuid_any_t ble_uuid;
   uint16_t handle;
 };
 
@@ -91,7 +87,6 @@ struct esp32_bt_gatts_session_entry {
 };
 
 struct esp32_bt_gatts_connection_entry {
-  esp_gatt_if_t gatt_if;
   struct mgos_bt_gatt_conn gc;
   enum mgos_bt_gatt_sec_level sec_level;
   bool need_auth;
@@ -104,23 +99,14 @@ struct esp32_bt_gatts_connection_entry {
 };
 
 struct esp32_bt_gatts_ev_info {
-  esp_gatt_if_t gatts_if;
-  esp_gatts_cb_event_t ev;
-  esp_ble_gatts_cb_param_t ep;
+  // esp_gatts_cb_event_t ev;
+  // esp_ble_gatts_cb_param_t ep;
 };
 
 static SLIST_HEAD(s_svcs, esp32_bt_gatts_service_entry) s_svcs =
     SLIST_HEAD_INITIALIZER(s_svcs);
 static SLIST_HEAD(s_conns, esp32_bt_gatts_connection_entry) s_conns =
     SLIST_HEAD_INITIALIZER(s_conns);
-
-static bool s_gatts_registered = false;
-static bool s_register_in_flight = false;
-static esp_gatt_if_t s_gatts_if;
-
-const uint16_t primary_service_uuid = ESP_GATT_UUID_PRI_SERVICE;
-const uint16_t char_decl_uuid = ESP_GATT_UUID_CHAR_DECLARE;
-const uint16_t char_client_config_uuid = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
 
 static void esp32_bt_gatts_send_next_ind(
     struct esp32_bt_gatts_connection_entry *ce);
@@ -130,6 +116,7 @@ static void esp32_bt_gatts_send_resp(struct mgos_bt_gatts_conn *gsc,
                                      uint16_t handle, uint32_t trans_id,
                                      enum mgos_bt_gatt_status status);
 
+#if 0
 esp_gatt_status_t esp32_bt_gatt_get_status(enum mgos_bt_gatt_status st) {
   switch (st) {
     case MGOS_BT_GATT_STATUS_OK:
@@ -157,26 +144,9 @@ esp_gatt_status_t esp32_bt_gatt_get_status(enum mgos_bt_gatt_status st) {
   }
   return ESP_GATT_INTERNAL_ERROR;
 }
+#endif
 
-static esp_err_t esp32_bt_register_service(
-    struct esp32_bt_gatts_service_entry *se) {
-  s_register_in_flight = true;
-  esp_gatt_srvc_id_t svc_id = {
-      .is_primary = true,
-  };
-  mgos_bt_uuid_to_esp32(&se->uuid, &svc_id.id.uuid);
-  /* Count number of DB entries required */
-  uint16_t db_size = se->num_attrs + 1 /* For svc decl */;
-  for (uint16_t i = 0; i < se->num_attrs; i++) {
-    if (!se->attrs[i].def.is_desc) db_size++;  // For char decl
-  }
-  esp_err_t err = esp_ble_gatts_create_service(s_gatts_if, &svc_id, db_size);
-  if (err != ESP_OK) {
-    s_register_in_flight = false;
-  }
-  return err;
-}
-
+#if 0
 static uint16_t get_read_perm(enum mgos_bt_gatt_sec_level sec_level) {
   if (mgos_sys_config_get_bt_gatts_min_sec_level() > sec_level) {
     sec_level = mgos_sys_config_get_bt_gatts_min_sec_level();
@@ -214,7 +184,9 @@ static uint16_t get_write_perm(enum mgos_bt_gatt_sec_level sec_level) {
   }
   return res;
 }
+#endif
 
+#if 0
 static esp_err_t esp32_bt_register_next_attr(
     struct esp32_bt_gatts_service_entry *se) {
   if (se->num_attrs_registered >= se->num_attrs) return ESP_GATT_INVALID_OFFSET;
@@ -270,27 +242,35 @@ static esp_err_t esp32_bt_register_next_attr(
   }
   return err;
 }
+#endif
 
-static void esp32_bt_register_services(void) {
-  if (!s_gatts_registered || s_register_in_flight) return;
-  struct esp32_bt_gatts_service_entry *se;
-  SLIST_FOREACH(se, &s_svcs, next) {
-    if (se->num_attrs_registered == se->num_attrs) continue;
-    if (se->num_attrs_registered == (uint16_t) -2) continue;
-    if (se->num_attrs_registered == (uint16_t) -1) {
-      esp_err_t err = esp32_bt_register_service(se);
-      if (err != ESP_OK) {
-        LOG(LL_ERROR, ("Failed to register BT service: %d", err));
-        se->num_attrs_registered = (uint16_t) -2;
-        continue;
-      }
+static void esp32_gatts_register_cb(struct ble_gatt_register_ctxt *ctxt,
+                                    void *arg) {
+  char buf[MGOS_BT_UUID_STR_LEN];
+
+  switch (ctxt->op) {
+    case BLE_GATT_REGISTER_OP_SVC:
+      LOG(LL_DEBUG, ("Registering service %s with handle=%d",
+                     esp32_bt_uuid_to_str(ctxt->svc.svc_def->uuid, buf),
+                     ctxt->svc.handle));
       break;
-    }
-    esp32_bt_register_next_attr(se);
-    break;
+
+    case BLE_GATT_REGISTER_OP_CHR:
+      LOG(LL_DEBUG, ("Registering characteristic %s with "
+                     "def_handle=%d val_handle=%d",
+                     esp32_bt_uuid_to_str(ctxt->chr.chr_def->uuid, buf),
+                     ctxt->chr.def_handle, ctxt->chr.val_handle));
+      break;
+
+    case BLE_GATT_REGISTER_OP_DSC:
+      LOG(LL_DEBUG, ("Registering descriptor %s with handle=%d",
+                     esp32_bt_uuid_to_str(ctxt->dsc.dsc_def->uuid, buf),
+                     ctxt->dsc.handle));
+      break;
   }
 }
 
+#if 0
 static struct esp32_bt_gatts_service_entry *find_service_by_uuid(
     const esp_bt_uuid_t *esp_uuid) {
   struct esp32_bt_gatts_service_entry *se;
@@ -301,6 +281,7 @@ static struct esp32_bt_gatts_service_entry *find_service_by_uuid(
   }
   return NULL;
 }
+#endif
 
 static struct esp32_bt_gatts_service_entry *find_service_by_svc_handle(
     uint16_t svc_handle) {
@@ -326,19 +307,17 @@ static struct esp32_bt_gatts_service_entry *find_service_by_attr_handle(
 }
 
 static struct esp32_bt_gatts_connection_entry *find_connection(
-    esp_gatt_if_t gatt_if, uint16_t conn_id) {
+    uint16_t conn_id) {
   struct esp32_bt_gatts_connection_entry *ce = NULL;
   SLIST_FOREACH(ce, &s_conns, next) {
-    if (ce->gatt_if == gatt_if && ce->gc.conn_id == conn_id) return ce;
+    if (ce->gc.conn_id == conn_id) return ce;
   }
   return NULL;
 }
 
 static struct esp32_bt_gatts_session_entry *find_session(
-    esp_gatt_if_t gatt_if, uint16_t conn_id, uint16_t handle,
-    struct esp32_bt_service_attr_info **ai) {
-  struct esp32_bt_gatts_connection_entry *ce =
-      find_connection(gatt_if, conn_id);
+    uint16_t conn_id, uint16_t handle, struct esp32_bt_service_attr_info **ai) {
+  struct esp32_bt_gatts_connection_entry *ce = find_connection(conn_id);
   if (ce == NULL) return NULL;
   struct esp32_bt_gatts_service_entry *se =
       find_service_by_attr_handle(handle, ai);
@@ -353,8 +332,7 @@ static struct esp32_bt_gatts_session_entry *find_session(
 static struct esp32_bt_gatts_session_entry *find_session_by_gsc(
     const struct mgos_bt_gatts_conn *gsc) {
   if (gsc == NULL) return NULL;
-  struct esp32_bt_gatts_connection_entry *ce =
-      find_connection(s_gatts_if, gsc->gc.conn_id);
+  struct esp32_bt_gatts_connection_entry *ce = find_connection(gsc->gc.conn_id);
   if (ce == NULL) return NULL;
   struct esp32_bt_gatts_session_entry *sse;
   SLIST_FOREACH(sse, &ce->sessions, next) {
@@ -363,6 +341,7 @@ static struct esp32_bt_gatts_session_entry *find_session_by_gsc(
   return NULL;
 }
 
+#if 0
 static bool is_paired(const esp_bd_addr_t addr) {
   bool result = false;
   int num = esp_ble_get_bond_device_num();
@@ -1148,10 +1127,51 @@ static void esp32_bt_gatts_send_next_ind(
     ce->ind_in_flight = false;
   }
 }
+#endif
+
+int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
+  LOG(LL_DEBUG, ("GATTS EV %d", ev->type));
+  return 0;
+}
 
 bool mgos_bt_gatts_disconnect(struct mgos_bt_gatts_conn *gsc) {
   if (gsc == NULL) return false;
-  return esp_ble_gatts_close(s_gatts_if, gsc->gc.conn_id) == ESP_OK;
+  return ble_gap_terminate(gsc->gc.conn_id, BLE_ERR_REM_USER_CONN_TERM) == 0;
+}
+
+static int esp32_gatts_attr_access_cb(uint16_t conn_handle,
+                                      uint16_t attr_handle,
+                                      struct ble_gatt_access_ctxt *ctxt,
+                                      void *arg) {
+  return 0;
+}
+
+static int esp32_bt_register_service(struct esp32_bt_gatts_service_entry *se) {
+  int rc = 0;
+  rc = ble_gatts_count_cfg(&se->ble_svc_def[0]);
+  if (rc != 0) {
+    LOG(LL_INFO, ("Count failed"));
+    return rc;
+  }
+  rc = ble_gatts_add_svcs(&se->ble_svc_def[0]);
+  if (rc != 0) {
+    LOG(LL_INFO, ("Add failed"));
+    return rc;
+  }
+  return rc;
+}
+
+static void esp32_bt_register_services(void) {
+  char buf[MGOS_BT_UUID_STR_LEN];
+  struct esp32_bt_gatts_service_entry *se;
+  SLIST_FOREACH(se, &s_svcs, next) {
+    int rc = esp32_bt_register_service(se);
+    if (rc != 0) {
+      LOG(LL_ERROR, ("Failed to register BT service %s: %d",
+                     mgos_bt_uuid_to_str(&se->uuid, buf), rc));
+      continue;
+    }
+  }
 }
 
 bool mgos_bt_gatts_register_service(const char *svc_uuid,
@@ -1172,15 +1192,34 @@ bool mgos_bt_gatts_register_service(const char *svc_uuid,
   se->sec_level = sec_level;
   const struct mgos_bt_gatts_char_def *cd = NULL;
   // Count the number of attrs required.
+  int num_chars = 0, num_descrs = 0;
   for (cd = chars; cd->uuid != NULL; cd++) {
     se->num_attrs++;
-    if (cd->prop & (MGOS_BT_GATT_PROP_NOTIFY | MGOS_BT_GATT_PROP_INDICATE)) {
-      se->num_attrs++;  // CCCD
+    if (!cd->is_desc) {
+      num_chars++;
+    } else if (cd != chars) {
+      num_descrs++;
+      // Add 1 desc entry per characteristic - for end marker.
+      if (!(cd - 1)->is_desc) num_descrs++;
+    } else {
+      // Descriptors must always follow a characteristic definition
+      // so a descriptor cannot be the first item in the list.
+      goto out;
     }
   }
+  if (num_chars == 0) goto out;
   se->attrs = calloc(se->num_attrs, sizeof(*se->attrs));
   if (se->attrs == NULL) goto out;
+  se->ble_chars = calloc(num_chars + 1, sizeof(*se->ble_chars));
+  if (se->ble_chars == NULL) goto out;
+  if (num_descrs > 0) {
+    se->ble_descrs = calloc(num_descrs + 1, sizeof(*se->ble_descrs));
+    if (se->ble_descrs == NULL) goto out;
+  }
+
   struct esp32_bt_service_attr_info *ai = se->attrs;
+  struct ble_gatt_chr_def *bchr = se->ble_chars;
+  struct ble_gatt_dsc_def *bdsc = se->ble_descrs;
   for (cd = chars; cd->uuid != NULL; cd++, ai++) {
     ai->def = *cd;
     if (!cd->is_uuid_bin &&
@@ -1189,30 +1228,58 @@ bool mgos_bt_gatts_register_service(const char *svc_uuid,
       goto out;
     }
     ai->def.is_uuid_bin = true;
-    if (cd->is_desc) continue;
-    if (cd->prop & (MGOS_BT_GATT_PROP_NOTIFY | MGOS_BT_GATT_PROP_INDICATE)) {
-      /* Add client config descriptor (CCCD) */
-      ai++;
-      ai->def.uuid_bin.len = 2;
-      ai->def.uuid_bin.uuid.uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG;
-      ai->def.is_uuid_bin = true;
-      ai->def.is_desc = true;
-      ai->def.prop = MGOS_BT_GATT_PROP_READ | MGOS_BT_GATT_PROP_WRITE;
-      se->num_cccds++;
+    mgos_bt_uuid_to_esp32(&ai->def.uuid_bin, &ai->ble_uuid);
+    if (!cd->is_desc) {
+      bchr->uuid = &ai->ble_uuid.u;
+      bchr->access_cb = esp32_gatts_attr_access_cb;
+      bchr->arg = se;
+      bchr->min_key_size = 0;  // TODO
+      bchr->val_handle = &ai->handle;
+      uint8_t pp = cd->prop, ff = 0;
+      if (pp & MGOS_BT_GATT_PROP_READ) ff |= BLE_GATT_CHR_F_READ;
+      if (pp & MGOS_BT_GATT_PROP_WRITE) ff |= BLE_GATT_CHR_F_WRITE;
+      if (pp & MGOS_BT_GATT_PROP_NOTIFY) ff |= BLE_GATT_CHR_F_NOTIFY;
+      if (pp & MGOS_BT_GATT_PROP_INDICATE) ff |= BLE_GATT_CHR_F_INDICATE;
+      if (pp & MGOS_BT_GATT_PROP_WRITE_NR) ff |= BLE_GATT_CHR_PROP_WRITE_NO_RSP;
+      bchr->flags = ff;
+      bchr++;
+      if (cd != chars && (cd - 1)->is_desc) bdsc++;
+    } else {
+      bdsc->uuid = &ai->ble_uuid.u;
+      bdsc->min_key_size = 0;  // TODO
+      bdsc->access_cb = esp32_gatts_attr_access_cb;
+      bdsc->arg = se;
+      uint8_t pp = cd->prop, af = 0;
+      if (pp & MGOS_BT_GATT_PROP_READ) af |= BLE_ATT_F_READ;
+      if (pp & MGOS_BT_GATT_PROP_WRITE) af |= BLE_ATT_F_WRITE;
+      bdsc->att_flags = af;
+      if (!(cd - 1)->is_desc) (bchr - 1)->descriptors = bdsc;
+      bdsc++;
     }
   }
-  se->num_attrs_registered = (uint16_t) -1;
+
+  mgos_bt_uuid_to_esp32(&se->uuid, &se->ble_uuid);
+  struct ble_gatt_svc_def *bsvc = &se->ble_svc_def[0];
+  bsvc->type = BLE_GATT_SVC_TYPE_PRIMARY;
+  bsvc->uuid = &se->ble_uuid.u;
+  bsvc->characteristics = se->ble_chars;
+  se->ble_svc_def[1].type = BLE_GATT_SVC_TYPE_END;
+
   SLIST_INSERT_HEAD(&s_svcs, se, next);
-  esp32_bt_register_services();
+  // TODO: restart if needed.
   res = true;
 out:
   if (!res && se != NULL) {
     free(se->attrs);
+    free(se->ble_chars);
+    free(se->ble_descrs);
     free(se);
   }
+  LOG(LL_INFO, ("REG %d", res));
   return res;
 }
 
+#if 0
 bool mgos_bt_gatts_unregister_service(const char *uuid_str) {
   struct esp32_bt_gatts_service_entry *se;
   struct mgos_bt_uuid uuid;
@@ -1250,12 +1317,14 @@ static void esp32_bt_gatts_send_resp(struct mgos_bt_gatts_conn *gsc,
   LOG(LL_DEBUG, ("h %u tid %u st %d est %d", handle, trans_id, st, est));
   esp_ble_gatts_send_response(s_gatts_if, gsc->gc.conn_id, trans_id, est, &rsp);
 }
+#endif
 
 void mgos_bt_gatts_send_resp_data(struct mgos_bt_gatts_conn *gsc,
                                   struct mgos_bt_gatts_read_arg *ra,
                                   struct mg_str data) {
   struct esp32_bt_gatts_session_entry *sse = find_session_by_gsc(gsc);
   if (sse == NULL) return;
+#if 0
   uint16_t to_send = data.len;
   if (to_send >= gsc->gc.mtu) to_send = gsc->gc.mtu - 1;
   esp_gatt_rsp_t rsp = {
@@ -1278,6 +1347,7 @@ void mgos_bt_gatts_send_resp_data(struct mgos_bt_gatts_conn *gsc,
     mbuf_clear(&sse->long_read_data);
     mbuf_append(&sse->long_read_data, data.p + to_send, data.len - to_send);
   }
+#endif
 }
 
 void mgos_bt_gatts_notify(struct mgos_bt_gatts_conn *gsc,
@@ -1293,7 +1363,7 @@ void mgos_bt_gatts_notify(struct mgos_bt_gatts_conn *gsc,
     STAILQ_INSERT_TAIL(&sse->ce->pending_inds, pi, next);
     sse->ce->ind_queue_len++;
   }
-  esp32_bt_gatts_send_next_ind(sse->ce);
+  //  esp32_bt_gatts_send_next_ind(sse->ce);
 }
 
 void mgos_bt_gatts_notify_uuid(struct mgos_bt_gatts_conn *gsc,
@@ -1313,7 +1383,8 @@ void mgos_bt_gatts_notify_uuid(struct mgos_bt_gatts_conn *gsc,
 }
 
 bool esp32_bt_gatts_init(void) {
-  return (esp_ble_gatts_register_callback(esp32_bt_gatts_ev) == ESP_OK &&
-          esp_ble_gatts_app_register(0) == ESP_OK);
+  LOG(LL_INFO, ("GATTS init, synced? %d", ble_hs_synced()));
+  ble_hs_cfg.gatts_register_cb = esp32_gatts_register_cb;
+  esp32_bt_register_services();
+  return true;
 }
-#endif

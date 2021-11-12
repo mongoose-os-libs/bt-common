@@ -91,6 +91,12 @@ void esp32_bt_uuid_to_mgos(const ble_uuid_any_t *in, struct mgos_bt_uuid *out) {
   memcpy(out->uuid.uuid128, in->u128.value, 16);
 }
 
+const char *esp32_bt_uuid_to_str(const ble_uuid_t *uuid, char *out) {
+  struct mgos_bt_uuid uuidm;
+  esp32_bt_uuid_to_mgos((const ble_uuid_any_t *) uuid, &uuidm);
+  return mgos_bt_uuid_to_str(&uuidm, out);
+}
+
 static void mgos_bt_net_ev(int ev, void *evd, void *arg) {
   if (ev != MGOS_NET_EV_IP_ACQUIRED) return;
   if (mgos_sys_config_get_bt_keep_enabled()) return;
@@ -133,11 +139,11 @@ bool mgos_bt_get_device_address(struct mgos_bt_addr *addr) {
   return true;
 }
 
-static void _on_reset(int reason) {
+static void esp32_bt_reset(int reason) {
   LOG(LL_ERROR, ("Resetting state; reason=%d", reason));
 }
 
-static void _on_sync(void) {
+static void esp32_bt_synced(void) {
   int rc;
 
   bool privacy = mgos_sys_config_get_bt_random_address();
@@ -157,16 +163,26 @@ static void _on_sync(void) {
   }
 
   if (!esp32_bt_gap_init()) {
-    LOG(LL_ERROR, ("GAP init failed"));
+    LOG(LL_ERROR, ("%s init failed", "GAP"));
   }
+  mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
 }
 
 static void ble_host_task(void *param) {
-  LOG(LL_INFO, ("BLE task starting"));
+  LOG(LL_DEBUG, ("BLE task %s", "running"));
   nimble_port_run();
-  LOG(LL_INFO, ("BLE task ending"));
   nimble_port_freertos_deinit();
-  LOG(LL_INFO, ("BLE task exiting"));
+  LOG(LL_DEBUG, ("BLE task %s", "exiting"));
+}
+
+static void esp32_bt_start(void *arg) {
+  LOG(LL_DEBUG, ("BLE task %s", "starting"));
+  if (!esp32_bt_gatts_init()) {
+    LOG(LL_ERROR, ("%s init failed", "GATTS"));
+  }
+  nimble_port_freertos_init(ble_host_task);
+  ble_hs_sched_start();
+  (void) arg;
 }
 
 extern void ble_store_config_init(void);
@@ -193,8 +209,8 @@ bool mgos_bt_common_init(void) {
 
   nimble_port_init();
 
-  ble_hs_cfg.reset_cb = _on_reset;
-  ble_hs_cfg.sync_cb = _on_sync;
+  ble_hs_cfg.reset_cb = esp32_bt_reset;
+  ble_hs_cfg.sync_cb = esp32_bt_synced;
   // ble_hs_cfg.gatts_register_cb = gatt_svr_register_cb;
   ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
@@ -224,9 +240,9 @@ bool mgos_bt_common_init(void) {
 
   ble_store_config_init();
 
-  ble_att_set_preferred_mtu(mgos_sys_config_get_bt_gatt_mtu());
-
-  nimble_port_freertos_init(ble_host_task);
+  // Delay starting the stack until other libraries are initialized
+  // and services registered.
+  mgos_invoke_cb(esp32_bt_start, NULL, false /* from_isr */);
 
   LOG(LL_INFO, ("Bluetooth init ok, MTU %d, pairing %s, %d paired devices",
                 mgos_sys_config_get_bt_gatt_mtu(),
