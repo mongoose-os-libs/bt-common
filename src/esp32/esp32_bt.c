@@ -93,22 +93,44 @@ void esp32_bt_uuid_to_mgos(const ble_uuid_any_t *in, struct mgos_bt_uuid *out) {
 
 static void mgos_bt_net_ev(int ev, void *evd, void *arg) {
   if (ev != MGOS_NET_EV_IP_ACQUIRED) return;
+  if (mgos_sys_config_get_bt_keep_enabled()) return;
   LOG(LL_INFO, ("Network is up, disabling Bluetooth"));
   mgos_sys_config_set_bt_enable(false);
-#if 0  // TODO
   char *msg = NULL;
   if (save_cfg(&mgos_sys_config, &msg)) {
-    esp_bt_controller_disable();
-    esp_bt_controller_deinit();
-    esp_bt_controller_mem_release(ESP_BT_MODE_BLE);
+    nimble_port_stop();
   }
-#endif
   (void) arg;
 }
 
-bool esp32_bt_wipe_config(void) {
-  // TODO
-  return false;
+bool mgos_bt_get_device_address(struct mgos_bt_addr *addr) {
+  int rc = ble_hs_id_infer_auto(mgos_sys_config_get_bt_random_address(),
+                                &own_addr_type);
+  if (rc != 0) {
+    LOG(LL_ERROR, ("error determining address type; rc=%d", rc));
+    return false;
+  }
+  ble_addr_t baddr = {0};
+  int is_nrpa = false;
+  rc = ble_hs_id_copy_addr(own_addr_type, baddr.val, &is_nrpa);
+  if (rc != 0) {
+    LOG(LL_ERROR, ("BLE addr error %d", rc));
+    return false;
+  }
+  switch (own_addr_type) {
+    case BLE_OWN_ADDR_PUBLIC:
+      baddr.type = BLE_ADDR_PUBLIC;
+      break;
+    case BLE_OWN_ADDR_RANDOM:
+    case BLE_OWN_ADDR_RPA_RANDOM_DEFAULT:
+    case BLE_OWN_ADDR_RPA_PUBLIC_DEFAULT:
+      baddr.type = BLE_ADDR_RANDOM;
+      break;
+    default:
+      return false;
+  }
+  esp32_bt_addr_to_mgos(&baddr, addr);
+  return true;
 }
 
 static void _on_reset(int reason) {
@@ -126,42 +148,25 @@ static void _on_sync(void) {
     return;
   }
 
-  rc = ble_hs_id_infer_auto(privacy, &own_addr_type);
-  if (rc != 0) {
-    LOG(LL_ERROR, ("error determining address type; rc=%d", rc));
-    return;
+  struct mgos_bt_addr addr;
+  if (mgos_bt_get_device_address(&addr)) {
+    char addr_str[MGOS_BT_ADDR_STR_LEN] = {0};
+    LOG(LL_INFO,
+        ("BLE Device Address: %s",
+         mgos_bt_addr_to_str(&addr, MGOS_BT_ADDR_STRINGIFY_TYPE, addr_str)));
   }
 
-  ble_addr_t addr = {0};
-  int is_nrpa = false;
-  rc = ble_hs_id_copy_addr(own_addr_type, addr.val, &is_nrpa);
-  if (rc != 0) {
-    LOG(LL_ERROR, ("BLE addr error %d", rc));
-    return;
+  if (!esp32_bt_gap_init()) {
+    LOG(LL_ERROR, ("GAP init failed"));
   }
-  switch (own_addr_type) {
-    case BLE_OWN_ADDR_PUBLIC:
-      addr.type = BLE_ADDR_PUBLIC;
-      break;
-    case BLE_OWN_ADDR_RANDOM:
-    case BLE_OWN_ADDR_RPA_RANDOM_DEFAULT:
-    case BLE_OWN_ADDR_RPA_PUBLIC_DEFAULT:
-      addr.type = BLE_ADDR_RANDOM;
-      break;
-  }
-  struct mgos_bt_addr maddr = {0};
-  esp32_bt_addr_to_mgos(&addr, &maddr);
-  char addr_str[18] = {0};
-  LOG(LL_INFO,
-      ("BLE Device Address: %s",
-       mgos_bt_addr_to_str(&maddr, MGOS_BT_ADDR_STRINGIFY_TYPE, addr_str)));
-
-  mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
 }
 
 static void ble_host_task(void *param) {
+  LOG(LL_INFO, ("BLE task starting"));
   nimble_port_run();
+  LOG(LL_INFO, ("BLE task ending"));
   nimble_port_freertos_deinit();
+  LOG(LL_INFO, ("BLE task exiting"));
 }
 
 extern void ble_store_config_init(void);
@@ -200,11 +205,6 @@ bool mgos_bt_common_init(void) {
 
   ble_att_set_preferred_mtu(mgos_sys_config_get_bt_gatt_mtu());
 
-  if (!esp32_bt_gap_init()) {
-    LOG(LL_ERROR, ("GAP init failed"));
-    ret = false;
-    goto out;
-  }
 #if 0
   if (!esp32_bt_gattc_init()) {
     LOG(LL_ERROR, ("GATTC init failed"));

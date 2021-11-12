@@ -76,6 +76,8 @@ void mgos_bt_uuid128_from_bytes(const uint8_t *bytes, bool reverse,
 
 void mgos_event_trigger_schedule(int ev, void *ev_data, size_t data_len);
 
+bool mgos_bt_get_device_address(struct mgos_bt_addr *addr);
+
 #ifdef __cplusplus
 }
 #endif

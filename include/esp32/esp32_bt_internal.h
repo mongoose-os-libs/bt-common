@@ -35,8 +35,6 @@ bool esp32_bt_gatts_init(void);
 
 void esp32_bt_set_is_advertising(bool is_advertising);
 
-bool esp32_bt_wipe_config(void);
-
 #ifdef __cplusplus
 }
 #endif
