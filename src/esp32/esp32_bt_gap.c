@@ -212,6 +212,7 @@ static int mgos_bt_scan_event_fn(struct ble_gap_event *ev, void *arg) {
             ev->disc.length_data));
       if (!ctx->active) {
         if (ev->disc.event_type == BLE_HCI_ADV_RPT_EVTYPE_ADV_IND) {
+          //mg_strfree(&arg.adv_data);
           mgos_event_trigger_schedule(MGOS_BT_GAP_EVENT_SCAN_RESULT, &arg, sizeof(arg));
         }
         break;

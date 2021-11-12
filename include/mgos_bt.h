@@ -74,7 +74,7 @@ int mgos_bt_uuid_cmp(const struct mgos_bt_uuid *a,
 void mgos_bt_uuid128_from_bytes(const uint8_t *bytes, bool reverse,
                                 struct mgos_bt_uuid *uuid);
 
-void mgos_event_trigger_schedule(int ev, const void *ev_data, size_t data_len);
+void mgos_event_trigger_schedule(int ev, void *ev_data, size_t data_len);
 
 #ifdef __cplusplus
 }

@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "mgos.h"
 #include "mgos_bt_gap.h"
 #include "mgos_bt_gattc.h"
 #include "mgos_system.h"
@@ -164,10 +165,7 @@ struct mgos_event_info {
   int ev;
 };
 
-static void trigger_cb(void *arg) {
-  struct mgos_event_info *ei = arg;
-  void *ev_data = ei + 1;
-  mgos_event_trigger(ei->ev, ev_data);
+static void free_evt(struct mgos_event_info *ei, void *ev_data) {
   if (ei->ev == MGOS_BT_GATTC_EV_READ_RESULT) {
     struct mgos_bt_gattc_read_result *p = ev_data;
     mg_strfree(&p->data);
@@ -182,11 +180,18 @@ static void trigger_cb(void *arg) {
   free(ei);
 }
 
-void mgos_event_trigger_schedule(int ev, const void *ev_data, size_t data_len) {
+static void trigger_cb(void *arg) {
+  struct mgos_event_info *ei = arg;
+  void *ev_data = ei + 1;
+  mgos_event_trigger(ei->ev, ev_data);
+  free_evt(ei, ev_data);
+}
+
+void mgos_event_trigger_schedule(int ev, void *ev_data, size_t data_len) {
   struct mgos_event_info *ei = malloc(sizeof(*ei) + data_len);
   ei->ev = ev;
   memcpy(ei + 1, ev_data, data_len);
   if (!mgos_invoke_cb(trigger_cb, ei, false /* from_isr */)) {
-    free(ei);
+    free_evt(ei, ev_data);
   }
 }
