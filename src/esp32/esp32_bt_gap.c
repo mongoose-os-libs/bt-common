@@ -181,11 +181,10 @@ static int esp32_bt_gap_event(struct ble_gap_event *ev, void *arg) {
       mgos_bt_gap_set_adv_enable(mgos_bt_gap_get_adv_enable());
       // fallthrough
     case BLE_GAP_EVENT_DISCONNECT:
-    case BLE_GAP_EVENT_CONN_UPDATE:
     case BLE_GAP_EVENT_ENC_CHANGE:
     case BLE_GAP_EVENT_SUBSCRIBE:
-    case BLE_GAP_EVENT_MTU:
     case BLE_GAP_EVENT_NOTIFY_TX:
+    case BLE_GAP_EVENT_MTU:
       esp32_bt_gatts_event(ev, arg);
       break;
     case BLE_GAP_EVENT_ADV_COMPLETE:

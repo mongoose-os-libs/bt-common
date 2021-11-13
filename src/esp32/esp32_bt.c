@@ -260,6 +260,9 @@ bool mgos_bt_common_init(void) {
   // and services registered.
   mgos_invoke_cb(esp32_bt_start, NULL, false /* from_isr */);
 
+  // Default INFO level log is too spammy.
+  esp_log_level_set("NimBLE", ESP_LOG_WARN);
+
   LOG(LL_INFO, ("Bluetooth init ok, MTU %d, pairing %s, %d paired devices",
                 mgos_sys_config_get_bt_gatt_mtu(),
                 (mgos_bt_gap_get_pairing_enable() ? "enabled" : "disabled"),
