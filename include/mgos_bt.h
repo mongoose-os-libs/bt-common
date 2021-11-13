@@ -50,9 +50,9 @@ struct mgos_bt_uuid {
 };
 
 /* Each byte is transformed into 3 bytes: "XX:", and last byte into "XX\0" */
-#define MGOS_BT_ADDR_STR_LEN (sizeof(struct mgos_bt_addr) * 3 + 2 /* type */)
-#define MGOS_BT_UUID_STR_LEN (sizeof(struct mgos_bt_uuid) * 3)
-#define MGOS_BT_DEV_NAME_LEN 32
+#define MGOS_BT_ADDR_STR_LEN (6 * 3 + 2 /* type */)
+#define MGOS_BT_UUID_STR_LEN (16 * 3)
+#define MGOS_BT_DEV_NAME_LEN (32)
 
 #define BT_ADDR_STR_LEN MGOS_BT_ADDR_STR_LEN
 

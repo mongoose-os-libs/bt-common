@@ -81,19 +81,35 @@ void esp32_bt_addr_to_mgos(const ble_addr_t *in, struct mgos_bt_addr *out) {
   out->addr[5] = in->val[0];
 }
 
+const char *esp32_bt_addr_to_str(const ble_addr_t *addr, char *out) {
+  struct mgos_bt_addr maddr;
+  esp32_bt_addr_to_mgos(addr, &maddr);
+  return mgos_bt_addr_to_str(&maddr, MGOS_BT_ADDR_STRINGIFY_TYPE, out);
+}
+
 void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, ble_uuid_any_t *out) {
   out->u.type = in->len * 8;
   memcpy(out->u128.value, in->uuid.uuid128, 16);
 }
 
-void esp32_bt_uuid_to_mgos(const ble_uuid_any_t *in, struct mgos_bt_uuid *out) {
-  out->len = in->u.type / 8;
-  memcpy(out->uuid.uuid128, in->u128.value, 16);
+void esp32_bt_uuid_to_mgos(const ble_uuid_t *in, struct mgos_bt_uuid *out) {
+  out->len = in->type / 8;
+  switch (in->type) {
+    case BLE_UUID_TYPE_16:
+      out->uuid.uuid16 = ((const ble_uuid16_t *) in)->value;
+      break;
+    case BLE_UUID_TYPE_32:
+      out->uuid.uuid32 = ((const ble_uuid32_t *) in)->value;
+      break;
+    case BLE_UUID_TYPE_128:
+      memcpy(out->uuid.uuid128, ((const ble_uuid128_t *) in)->value, 16);
+      break;
+  }
 }
 
 const char *esp32_bt_uuid_to_str(const ble_uuid_t *uuid, char *out) {
   struct mgos_bt_uuid uuidm;
-  esp32_bt_uuid_to_mgos((const ble_uuid_any_t *) uuid, &uuidm);
+  esp32_bt_uuid_to_mgos(uuid, &uuidm);
   return mgos_bt_uuid_to_str(&uuidm, out);
 }
 

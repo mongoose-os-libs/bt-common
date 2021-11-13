@@ -22,9 +22,6 @@
 #include "host/ble_uuid.h"
 #include "nimble/ble.h"
 
-#define MGOS_BT_DEV_NAME_LEN 32
-#define BT_UUID_STR_LEN (ESP_UUID_LEN_128 * 2 + ESP_UUID_LEN_128)
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -33,9 +30,10 @@ extern "C" {
 
 void mgos_bt_addr_to_esp32(const struct mgos_bt_addr *in, ble_addr_t *out);
 void esp32_bt_addr_to_mgos(const ble_addr_t *in, struct mgos_bt_addr *out);
+const char *esp32_bt_addr_to_str(const ble_addr_t *addr, char *out);
 
 void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, ble_uuid_any_t *out);
-void esp32_bt_uuid_to_mgos(const ble_uuid_any_t *in, struct mgos_bt_uuid *out);
+void esp32_bt_uuid_to_mgos(const ble_uuid_t *in, struct mgos_bt_uuid *out);
 const char *esp32_bt_uuid_to_str(const ble_uuid_t *uuid, char *out);
 
 extern uint8_t own_addr_type;
