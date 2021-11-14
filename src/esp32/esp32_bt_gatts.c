@@ -249,19 +249,19 @@ static void esp32_gatts_register_cb(struct ble_gatt_register_ctxt *ctxt,
 
   switch (ctxt->op) {
     case BLE_GATT_REGISTER_OP_SVC:
-      LOG(LL_DEBUG, ("REGISTER_OP_SVC %s sh %d",
+      LOG(LL_DEBUG, ("REGISTER_SVC %s sh %d",
                      esp32_bt_uuid_to_str(ctxt->svc.svc_def->uuid, buf),
                      ctxt->svc.handle));
       break;
 
     case BLE_GATT_REGISTER_OP_CHR:
-      LOG(LL_DEBUG, ("REGISTER_OP_CHR %s dh %d vh %d",
+      LOG(LL_DEBUG, ("REGISTER_CHR %s dh %d vh %d",
                      esp32_bt_uuid_to_str(ctxt->chr.chr_def->uuid, buf),
                      ctxt->chr.def_handle, ctxt->chr.val_handle));
       break;
 
     case BLE_GATT_REGISTER_OP_DSC:
-      LOG(LL_DEBUG, ("REGISTER_OP_DSC %s vh %d",
+      LOG(LL_DEBUG, ("REGISTERP_DSC %s vh %d",
                      esp32_bt_uuid_to_str(ctxt->dsc.dsc_def->uuid, buf),
                      ctxt->dsc.handle));
       break;
@@ -1128,7 +1128,7 @@ static void esp32_bt_gatts_send_next_ind_locked(
 
 int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
   int ret = 0;
-  char a1[MGOS_BT_UUID_STR_LEN], a2[MGOS_BT_UUID_STR_LEN];
+  char buf1[MGOS_BT_UUID_STR_LEN], buf2[MGOS_BT_UUID_STR_LEN];
   LOG(LL_DEBUG,
       ("GATTS EV %d hf %d", ev->type, (int) mgos_get_free_heap_size()));
   mgos_rlock(s_lock);
@@ -1139,7 +1139,7 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
       ble_gap_conn_find(conn_id, &cd);
       LOG(LL_INFO,
           ("CONNECT h %d addr %s st %d", conn_id,
-           esp32_bt_addr_to_str(&cd.peer_ota_addr, a1), ev->connect.status));
+           esp32_bt_addr_to_str(&cd.peer_ota_addr, buf1), ev->connect.status));
       if (ev->connect.status != 0) break;
       struct esp32_bt_gatts_connection_entry *ce = calloc(1, sizeof(*ce));
       if (ce == NULL) {
@@ -1151,7 +1151,6 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
       esp32_bt_addr_to_mgos(&cd.peer_ota_addr, &ce->gc.addr);
       STAILQ_INIT(&ce->pending_inds);
       SLIST_INSERT_HEAD(&s_conns, ce, next);
-      esp32_bt_gatts_create_sessions(ce);
       ble_gattc_exchange_mtu(conn_id, NULL, NULL);
       break;
     }
@@ -1159,7 +1158,7 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
       const struct ble_gap_conn_desc *cd = &ev->disconnect.conn;
       uint16_t conn_id = cd->conn_handle;
       LOG(LL_INFO, ("DISCONNECT h %d addr %s reason %d", conn_id,
-                    esp32_bt_addr_to_str(&cd->peer_ota_addr, a1),
+                    esp32_bt_addr_to_str(&cd->peer_ota_addr, buf1),
                     ev->disconnect.reason));
       struct esp32_bt_gatts_connection_entry *ce = find_connection(conn_id);
       if (ce == NULL) break;
@@ -1187,13 +1186,10 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
       uint16_t mtu = ev->mtu.value;
       LOG(LL_DEBUG,
           ("%s: MTU %d",
-           mgos_bt_addr_to_str(&ce->gc.addr, MGOS_BT_ADDR_STRINGIFY_TYPE, a1),
+           mgos_bt_addr_to_str(&ce->gc.addr, MGOS_BT_ADDR_STRINGIFY_TYPE, buf1),
            mtu));
-      ce->gc.mtu = mtu;
-      struct esp32_bt_gatts_session_entry *sse;
-      SLIST_FOREACH(sse, &ce->sessions, next) {
-        ((struct mgos_bt_gatt_conn *) &sse->gsc.gc)->mtu = mtu;
-      }
+      ce->gc.mtu = 1024;  // mtu;
+      esp32_bt_gatts_create_sessions(ce);
       break;
     }
     case BLE_GAP_EVENT_SUBSCRIBE: {
@@ -1214,8 +1210,8 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
         narg.mode = MGOS_BT_GATT_NOTIFY_MODE_INDICATE;
       }
       LOG(LL_DEBUG, ("NOTIFY_MODE c %d h %d %s/%s %d", ch, ah,
-                     mgos_bt_uuid_to_str(&narg.svc_uuid, a1),
-                     mgos_bt_uuid_to_str(&narg.char_uuid, a2), narg.mode));
+                     mgos_bt_uuid_to_str(&narg.svc_uuid, buf1),
+                     mgos_bt_uuid_to_str(&narg.char_uuid, buf2), narg.mode));
       esp32_bt_gatts_call_handler(sse, ai, MGOS_BT_GATTS_EV_NOTIFY_MODE, &narg);
       break;
     }
@@ -1299,32 +1295,77 @@ static int esp32_gatts_attr_access_cb(uint16_t conn_handle,
                                       struct ble_gatt_access_ctxt *ctxt,
                                       void *arg) {
   int res = 0;
+  char buf[MGOS_BT_UUID_STR_LEN], buf2[MGOS_BT_UUID_STR_LEN];
   struct esp32_bt_service_attr_info *ai = arg;
   struct esp32_bt_gatts_session_entry *sse =
       find_session(conn_handle, attr_handle, &ai);
+  const ble_uuid_t *uuid = NULL;
   LOG(LL_DEBUG, ("GATTS ATTR OP %d sse %p", ctxt->op, sse));
+  if (sse == NULL) return BLE_ATT_ERR_UNLIKELY;
   switch (ctxt->op) {
-    case BLE_GATT_ACCESS_OP_READ_CHR: {
-      const struct ble_gatt_chr_def *chr = ctxt->chr;
-      struct mgos_bt_gatts_read_arg read_arg = {
+    case BLE_GATT_ACCESS_OP_READ_CHR:
+      uuid = ctxt->chr->uuid;
+      // fallthrough
+    case BLE_GATT_ACCESS_OP_READ_DSC: {
+      if (uuid == NULL) {
+        uuid = ctxt->dsc->uuid;
+      }
+      struct mgos_bt_gatts_read_arg rarg = {
           .svc_uuid = sse->se->uuid,
-          .handle = *chr->val_handle,
+          .handle = attr_handle,
           .trans_id = 0,
           .offset = 0,
       };
-      esp32_bt_uuid_to_mgos(chr->uuid, &read_arg.char_uuid);
-      if (sse == NULL) {
-        res = BLE_ATT_ERR_UNLIKELY;
-        break;
-      }
+      esp32_bt_uuid_to_mgos(uuid, &rarg.char_uuid);
       enum mgos_bt_gatt_status st =
-          esp32_bt_gatts_call_handler(sse, ai, MGOS_BT_GATTS_EV_READ, &arg);
+          esp32_bt_gatts_call_handler(sse, ai, MGOS_BT_GATTS_EV_READ, &rarg);
+      LOG(LL_DEBUG,
+          ("READ %s ch %d ah %u (%s) -> %d %d",
+           mgos_bt_addr_to_str(&sse->gsc.gc.addr, 0, buf), sse->gsc.gc.conn_id,
+           rarg.handle, mgos_bt_uuid_to_str(&rarg.char_uuid, buf2), st,
+           (int) sse->resp_data.len));
       res = esp32_gatts_get_att_err(st);
       if (res == 0 && sse->resp_data.len > 0) {
-        LOG(LL_DEBUG, ("Send %d", (int) sse->resp_data.len));
         os_mbuf_append(ctxt->om, sse->resp_data.buf, sse->resp_data.len);
         mbuf_clear(&sse->resp_data);
       }
+      break;
+    }
+    case BLE_GATT_ACCESS_OP_WRITE_CHR:
+      uuid = ctxt->chr->uuid;
+      // fallthrough
+    case BLE_GATT_ACCESS_OP_WRITE_DSC: {
+      if (uuid == NULL) {
+        uuid = ctxt->dsc->uuid;
+      }
+      char *data = NULL;
+      uint16_t data_len = OS_MBUF_PKTLEN(ctxt->om);
+      if (data_len > 0) {
+        data = malloc(data_len);
+        if (data == NULL) {
+          res = BLE_ATT_ERR_UNLIKELY;
+          break;
+        }
+        ble_hs_mbuf_to_flat(ctxt->om, data, data_len, &data_len);
+      }
+      struct mgos_bt_gatts_write_arg warg = {
+          .svc_uuid = sse->se->uuid,
+          .char_uuid = ai->def.uuid_bin,
+          .handle = attr_handle,
+          .data = mg_mk_str_n(data, data_len),
+          .trans_id = 0,
+          .offset = 0,
+          .need_rsp = true,
+      };
+      enum mgos_bt_gatt_status st =
+          esp32_bt_gatts_call_handler(sse, ai, MGOS_BT_GATTS_EV_WRITE, &warg);
+      LOG(LL_DEBUG,
+          ("WRITE %s ch %d ah %u (%s) len %d -> %d",
+           mgos_bt_addr_to_str(&sse->gsc.gc.addr, 0, buf), sse->gsc.gc.conn_id,
+           warg.handle, mgos_bt_uuid_to_str(&warg.char_uuid, buf2),
+           (int) warg.data.len, st));
+      res = esp32_gatts_get_att_err(st);
+      free(data);
       break;
     }
   }
