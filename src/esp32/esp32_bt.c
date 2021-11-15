@@ -233,7 +233,8 @@ bool mgos_bt_common_init(void) {
   ble_hs_cfg.sm_sc = true;
   ble_hs_cfg.sm_io_cap = BLE_SM_IO_CAP_NO_IO;
   ble_hs_cfg.sm_bonding = mgos_sys_config_get_bt_allow_pairing();
-  ble_hs_cfg.sm_mitm = true;
+  ble_hs_cfg.sm_mitm = (mgos_sys_config_get_bt_gatts_min_sec_level() ==
+                        MGOS_BT_GATT_SEC_LEVEL_ENCR_MITM);
 
   ble_att_set_preferred_mtu(mgos_sys_config_get_bt_gatt_mtu());
 
