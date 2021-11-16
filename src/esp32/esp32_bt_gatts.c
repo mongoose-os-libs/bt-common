@@ -59,12 +59,6 @@ struct esp32_bt_service_attr_info {
   uint16_t handle;
 };
 
-struct esp32_bt_gatts_pending_write {
-  uint16_t handle;
-  struct mbuf value;
-  SLIST_ENTRY(esp32_bt_gatts_pending_write) next;
-};
-
 struct esp32_bt_gatts_pending_ind {
   uint16_t handle;
   bool is_ind;
@@ -80,18 +74,25 @@ struct esp32_bt_gatts_session_entry {
   struct mgos_bt_gatts_conn gsc;
   struct esp32_bt_gatts_service_entry *se;
   struct mbuf resp_data;
-  SLIST_HEAD(pending_writes, esp32_bt_gatts_pending_write) pending_writes;
   SLIST_ENTRY(esp32_bt_gatts_session_entry) next;
+};
+
+// This notification mode change is awaiting completion of the security
+// procedure.
+struct esp32_bt_gatts_pending_nm_entry {
+  struct mgos_bt_gatts_notify_mode_arg nmarg;
+  SLIST_ENTRY(esp32_bt_gatts_pending_nm_entry) next;
 };
 
 struct esp32_bt_gatts_connection_entry {
   struct mgos_bt_gatt_conn gc;
   enum mgos_bt_gatt_sec_level sec_level;
-  bool need_auth;
-  bool ind_in_flight;
+  bool sec_in_flight;
   /* Notifications/indications are finicky, so we keep at most one in flight. */
   int ind_queue_len;
+  bool ind_in_flight;
   STAILQ_HEAD(pending_inds, esp32_bt_gatts_pending_ind) pending_inds;
+  SLIST_HEAD(pending_nm, esp32_bt_gatts_pending_nm_entry) pending_nm;
   SLIST_HEAD(sessions, esp32_bt_gatts_session_entry) sessions;  // 1 per service
   SLIST_ENTRY(esp32_bt_gatts_connection_entry) next;
 };
@@ -237,11 +238,10 @@ static enum mgos_bt_gatt_status esp32_bt_gatts_call_handler(
 }
 
 void esp32_bt_gatts_close_session(struct esp32_bt_gatts_session_entry *sse) {
-  struct esp32_bt_gatts_pending_write *pw, *pwt;
-  SLIST_FOREACH_SAFE(pw, &sse->pending_writes, next, pwt) {
-    mbuf_free(&pw->value);
-    memset(pw, 0, sizeof(*pw));
-    free(pw);
+  struct esp32_bt_gatts_pending_nm_entry *pnm, *pnmt;
+  SLIST_FOREACH_SAFE(pnm, &sse->ce->pending_nm, next, pnmt) {
+    memset(pnm, 0, sizeof(*pnm));
+    free(pnm);
   }
   SLIST_REMOVE(&sse->ce->sessions, sse, esp32_bt_gatts_session_entry, next);
   esp32_bt_gatts_call_handler(sse, NULL, MGOS_BT_GATTS_EV_DISCONNECT, NULL);
@@ -262,7 +262,6 @@ static void esp32_bt_gatts_create_sessions(
     sse->gsc.gc = ce->gc;
     sse->gsc.svc_uuid = se->uuid;
     mbuf_init(&sse->resp_data, 0);
-    SLIST_INIT(&sse->pending_writes);
     enum mgos_bt_gatt_status st =
         esp32_bt_gatts_call_handler(sse, NULL, MGOS_BT_GATTS_EV_CONNECT, NULL);
     if (st != MGOS_BT_GATT_STATUS_OK) {
@@ -339,12 +338,10 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
       ce->gc.conn_id = conn_id;
       ce->gc.mtu = ble_att_mtu(conn_id);
       esp32_bt_addr_to_mgos(&cd.peer_ota_addr, &ce->gc.addr);
+      SLIST_INIT(&ce->pending_nm);
       STAILQ_INIT(&ce->pending_inds);
       SLIST_INSERT_HEAD(&s_conns, ce, next);
       ble_gattc_exchange_mtu(conn_id, NULL, NULL);
-      if (mgos_sys_config_get_bt_gatts_min_sec_level() > 0) {
-        // ble_gap_security_initiate(conn_id);
-      }
       break;
     }
     case BLE_GAP_EVENT_DISCONNECT: {
@@ -370,14 +367,38 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
       break;
     }
     case BLE_GAP_EVENT_ENC_CHANGE: {
-      uint16_t conn_id = ev->enc_change.conn_handle;
+      uint16_t ch = ev->enc_change.conn_handle;
       struct ble_gap_conn_desc cd = {0};
-      ble_gap_conn_find(conn_id, &cd);
+      ble_gap_conn_find(ch, &cd);
       struct ble_gap_sec_state *ss = &cd.sec_state;
+      struct esp32_bt_gatts_connection_entry *ce = find_connection(ch);
+      if (ce == NULL) break;
+      ce->sec_in_flight = false;
       LOG(LL_DEBUG, ("ENC_CHANGE %s ch %d st %d e %d a %d b %d ks %d",
-                     esp32_bt_addr_to_str(&cd.peer_ota_addr, buf1), conn_id,
+                     esp32_bt_addr_to_str(&cd.peer_ota_addr, buf1), ch,
                      ev->enc_change.status, ss->encrypted, ss->authenticated,
                      ss->bonded, ss->key_size));
+      if (ev->enc_change.status != 0) {
+        ble_gap_terminate(ch, BLE_ERR_REM_USER_CONN_TERM);
+        break;
+      }
+      while (!SLIST_EMPTY(&ce->pending_nm)) {
+        struct esp32_bt_gatts_pending_nm_entry *pnm =
+            SLIST_FIRST(&ce->pending_nm);
+        SLIST_REMOVE_HEAD(&ce->pending_nm, next);
+        struct mgos_bt_gatts_notify_mode_arg *narg = &pnm->nmarg;
+        uint16_t ah = narg->handle;
+        struct esp32_bt_service_attr_info *ai = NULL;
+        struct esp32_bt_gatts_session_entry *sse = find_session(ch, ah, &ai);
+        LOG(LL_DEBUG,
+            ("NOTIFY_MODE ch %d ah %d %s/%s %d", ch, ah,
+             mgos_bt_uuid_to_str(&narg->svc_uuid, buf1),
+             mgos_bt_uuid_to_str(&narg->char_uuid, buf2), narg->mode));
+        esp32_bt_gatts_call_handler(sse, ai, MGOS_BT_GATTS_EV_NOTIFY_MODE,
+                                    narg);
+        memset(pnm, 0, sizeof(*pnm));
+        free(pnm);
+      }
       break;
     }
     case BLE_GAP_EVENT_MTU: {
@@ -410,7 +431,25 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
       } else if (ev->subscribe.cur_indicate) {
         narg.mode = MGOS_BT_GATT_NOTIFY_MODE_INDICATE;
       }
-      LOG(LL_DEBUG, ("NOTIFY_MODE c %d h %d %s/%s %d", ch, ah,
+      // Work around https://github.com/apache/mynewt-nimble/issues/1092
+      if (sse->se->sec_level > 0 ||
+          mgos_sys_config_get_bt_gatts_min_sec_level() > 0) {
+        struct ble_gap_conn_desc cd = {0};
+        ble_gap_conn_find(ch, &cd);
+        struct ble_gap_sec_state *ss = &cd.sec_state;
+        if (!ss->encrypted) {
+          struct esp32_bt_gatts_pending_nm_entry *pnm = calloc(1, sizeof(*pnm));
+          pnm->nmarg = narg;
+          SLIST_INSERT_HEAD(&sse->ce->pending_nm, pnm, next);
+          if (!sse->ce->sec_in_flight) {
+            sse->ce->sec_in_flight = true;
+            ble_gap_security_initiate(ch);
+          }
+          ret = BLE_ATT_ERR_INSUFFICIENT_AUTHOR;
+          break;
+        }
+      }
+      LOG(LL_DEBUG, ("NOTIFY_MODE ch %d ah %d %s/%s %d", ch, ah,
                      mgos_bt_uuid_to_str(&narg.svc_uuid, buf1),
                      mgos_bt_uuid_to_str(&narg.char_uuid, buf2), narg.mode));
       esp32_bt_gatts_call_handler(sse, ai, MGOS_BT_GATTS_EV_NOTIFY_MODE, &narg);
