@@ -336,11 +336,13 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
         break;
       }
       ce->gc.conn_id = conn_id;
-      ce->gc.mtu = ble_att_mtu(conn_id);
+      //ce->gc.mtu = ble_att_mtu(conn_id);
+      ce->gc.mtu = 1024;  // mtu;
       esp32_bt_addr_to_mgos(&cd.peer_ota_addr, &ce->gc.addr);
       SLIST_INIT(&ce->pending_nm);
       STAILQ_INIT(&ce->pending_inds);
       SLIST_INSERT_HEAD(&s_conns, ce, next);
+      esp32_bt_gatts_create_sessions(ce);
       ble_gattc_exchange_mtu(conn_id, NULL, NULL);
       break;
     }
@@ -411,7 +413,6 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
            mgos_bt_addr_to_str(&ce->gc.addr, MGOS_BT_ADDR_STRINGIFY_TYPE, buf1),
            mtu));
       ce->gc.mtu = 1024;  // mtu;
-      esp32_bt_gatts_create_sessions(ce);
       break;
     }
     case BLE_GAP_EVENT_SUBSCRIBE: {
@@ -540,7 +541,7 @@ static int esp32_gatts_attr_access_cb(uint16_t conn_handle,
   struct esp32_bt_gatts_session_entry *sse =
       find_session(conn_handle, attr_handle, &ai);
   const ble_uuid_t *uuid = NULL;
-  LOG(LL_DEBUG, ("GATTS ATTR OP %d sse %p", ctxt->op, sse));
+  LOG(LL_DEBUG, ("GATTS ATTR %d OP %d sse %p", attr_handle, ctxt->op, sse));
   if (sse == NULL) return BLE_ATT_ERR_UNLIKELY;
   switch (ctxt->op) {
     case BLE_GATT_ACCESS_OP_READ_CHR:
