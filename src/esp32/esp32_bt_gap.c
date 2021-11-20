@@ -367,7 +367,6 @@ static bool start_advertising(void) {
   if (ble_svc_gap_device_name_set(dev_name) != 0) {
     return false;
   }
-
   struct ble_hs_adv_fields fields = {
       .flags = 0,
 
@@ -382,7 +381,6 @@ static bool start_advertising(void) {
     LOG(LL_ERROR, ("ble_gap_adv_set_fields: %d", rc));
     return false;
   }
-
   struct mg_str scan_rsp_data_hex =
       mg_mk_str(mgos_sys_config_get_bt_scan_rsp_data_hex());
   if (scan_rsp_data_hex.len > 0) {
@@ -397,10 +395,13 @@ static bool start_advertising(void) {
         LOG(LL_ERROR, ("Scan response data too long (%d), max is %d",
                        scan_rsp_data.len, MGOS_BT_GAP_MAX_SCAN_RSP_DATA_LEN));
       }
-      free((void *) scan_rsp_data.p);
     }
+    mg_strfree(&scan_rsp_data);
   }
-
+  if ((rc = ble_hs_id_infer_auto(0, &own_addr_type)) != 0) {
+    LOG(LL_ERROR, ("ble_hs_id_infer_auto: %d", rc));
+    return false;
+  }
   struct ble_gap_adv_params adv_params = {
       .conn_mode = BLE_GAP_CONN_MODE_UND,
       .disc_mode = BLE_GAP_DISC_MODE_GEN,
@@ -408,17 +409,11 @@ static bool start_advertising(void) {
       .itvl_max = BLE_GAP_ADV_FAST_INTERVAL2_MAX,
       .channel_map = BLE_GAP_ADV_DFLT_CHANNEL_MAP,
   };
-  if ((rc = ble_hs_id_infer_auto(0, &own_addr_type)) != 0) {
-    LOG(LL_ERROR, ("ble_hs_id_infer_auto: %d", rc));
-    return false;
-  }
-
   if ((rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &adv_params,
                               esp32_bt_gap_event, NULL)) != 0) {
     LOG(LL_ERROR, ("ble_hs_id_infer_auto: %d", rc));
     return false;
   }
-
   struct mgos_bt_addr addr;
   if (mgos_bt_get_device_address(&addr)) {
     char addr_str[MGOS_BT_ADDR_STR_LEN] = {0};

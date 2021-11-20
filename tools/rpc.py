@@ -92,12 +92,31 @@ class Device(btle.Peripheral):
             req["id"] = random.randint(1, 1000000000)
         reqJSON = json.dumps(req)
         reqLen = len(reqJSON)
-        time.sleep(10)
         logging.debug(f"Request: {reqJSON}")
-        logging.info("Writing length ({reqLen})...")
+        logging.debug(f"Writing length ({reqLen})...")
         self._tx_ctl_char.write(struct.pack(">I", reqLen), withResponse=True)
-        logging.debug(f"Writing data...")
+        logging.debug(f"Sending request...")
         self._data_char.write(reqJSON.encode("ascii"), withResponse=True)
+        prev_frame_len = 0
+        while True:
+            frame_len = struct.unpack(">I", self._rx_ctl_char.read())
+            logging.debug(f"RX frame len: {frame_len}")
+            if frame_len == 0:
+                time.sleep(0.1)
+                continue
+            frame = json.loads(self._data_char.read())
+            logging.debug(f"RX Frame data: {frame}")
+            if frame.get("id", 0) != req["id"]:
+                continue
+            if "result" in frame:
+                print(json.dumps(frame["result"]).encode("ascii"))
+                sys.exit(0)
+            elif "error" in frame:
+                print(json.dumps(frame["error"]).encode("ascii"))
+                sys.exit(2)
+            else:
+                logging.error(f"Invalid frame: {frame}")
+                sys.exit(1)
 
     def unlock(self):
         self.writeCharacteristic(0x0047, bytes([0, 0, 0, 0]))
@@ -127,6 +146,9 @@ def main():
         devices = scanner.scan(args.time)
         return
     elif args.action == "call":
+        params = {}
+        if args.params is not None:
+            params = json.loads(args.params)
         addrType = args.addr_type
         if len(args.target.split(":")) == 6:
             addr = args.target
@@ -150,7 +172,7 @@ def main():
         dev = None
         try:
             dev = Device(addr, addrType)
-            dev.call(args.method, params=args.params, resp=True)
+            dev.call(args.method, params=params, resp=True)
         finally:
             if dev:
                 dev.disconnect()

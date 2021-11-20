@@ -66,6 +66,13 @@ struct esp32_bt_gatts_pending_ind {
   STAILQ_ENTRY(esp32_bt_gatts_pending_ind) next;
 };
 
+struct esp32_bt_gatts_pending_read {
+  uint16_t handle;
+  struct mbuf data;
+  size_t read_offset;
+  SLIST_ENTRY(esp32_bt_gatts_pending_read) next;
+};
+
 struct esp32_bt_gatts_connection_entry;
 
 // A set of sessions is kept for each connection, one per service.
@@ -73,15 +80,14 @@ struct esp32_bt_gatts_session_entry {
   struct esp32_bt_gatts_connection_entry *ce;
   struct mgos_bt_gatts_conn gsc;
   struct esp32_bt_gatts_service_entry *se;
-  struct mbuf resp_data;
   SLIST_ENTRY(esp32_bt_gatts_session_entry) next;
 };
 
 // This notification mode change is awaiting completion of the security
 // procedure.
-struct esp32_bt_gatts_pending_nm_entry {
+struct esp32_bt_gatts_pending_nm {
   struct mgos_bt_gatts_notify_mode_arg nmarg;
-  SLIST_ENTRY(esp32_bt_gatts_pending_nm_entry) next;
+  SLIST_ENTRY(esp32_bt_gatts_pending_nm) next;
 };
 
 struct esp32_bt_gatts_connection_entry {
@@ -91,9 +97,10 @@ struct esp32_bt_gatts_connection_entry {
   /* Notifications/indications are finicky, so we keep at most one in flight. */
   int ind_queue_len;
   bool ind_in_flight;
-  STAILQ_HEAD(pending_inds, esp32_bt_gatts_pending_ind) pending_inds;
-  SLIST_HEAD(pending_nm, esp32_bt_gatts_pending_nm_entry) pending_nm;
   SLIST_HEAD(sessions, esp32_bt_gatts_session_entry) sessions;  // 1 per service
+  SLIST_HEAD(pending_nm, esp32_bt_gatts_pending_nm) pending_nm;
+  SLIST_HEAD(pending_reads, esp32_bt_gatts_pending_read) pending_reads;
+  STAILQ_HEAD(pending_inds, esp32_bt_gatts_pending_ind) pending_inds;
   SLIST_ENTRY(esp32_bt_gatts_connection_entry) next;
 };
 
@@ -112,6 +119,19 @@ static void esp32_bt_gatts_send_next_ind_locked(
     struct esp32_bt_gatts_connection_entry *ce);
 static void esp32_bt_gatts_create_sessions(
     struct esp32_bt_gatts_connection_entry *ce);
+
+static void esp32_bt_gatts_pending_ind_free(
+    struct esp32_bt_gatts_pending_ind *pi) {
+  mg_strfree(&pi->value);
+  memset(pi, 0, sizeof(*pi));
+  free(pi);
+}
+
+static void esp32_bt_gatts_pending_read_free(
+    struct esp32_bt_gatts_pending_read *pr) {
+  mbuf_free(&pr->data);
+  free(pr);
+}
 
 static uint16_t get_read_perm(enum mgos_bt_gatt_sec_level sec_level) {
   if (mgos_sys_config_get_bt_gatts_min_sec_level() > sec_level) {
@@ -238,14 +258,13 @@ static enum mgos_bt_gatt_status esp32_bt_gatts_call_handler(
 }
 
 void esp32_bt_gatts_close_session(struct esp32_bt_gatts_session_entry *sse) {
-  struct esp32_bt_gatts_pending_nm_entry *pnm, *pnmt;
+  struct esp32_bt_gatts_pending_nm *pnm, *pnmt;
   SLIST_FOREACH_SAFE(pnm, &sse->ce->pending_nm, next, pnmt) {
     memset(pnm, 0, sizeof(*pnm));
     free(pnm);
   }
   SLIST_REMOVE(&sse->ce->sessions, sse, esp32_bt_gatts_session_entry, next);
   esp32_bt_gatts_call_handler(sse, NULL, MGOS_BT_GATTS_EV_DISCONNECT, NULL);
-  mbuf_free(&sse->resp_data);
   memset(sse, 0, sizeof(*sse));
   free(sse);
 }
@@ -261,7 +280,6 @@ static void esp32_bt_gatts_create_sessions(
     sse->se = se;
     sse->gsc.gc = ce->gc;
     sse->gsc.svc_uuid = se->uuid;
-    mbuf_init(&sse->resp_data, 0);
     enum mgos_bt_gatt_status st =
         esp32_bt_gatts_call_handler(sse, NULL, MGOS_BT_GATTS_EV_CONNECT, NULL);
     if (st != MGOS_BT_GATT_STATUS_OK) {
@@ -336,7 +354,7 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
         break;
       }
       ce->gc.conn_id = conn_id;
-      //ce->gc.mtu = ble_att_mtu(conn_id);
+      // ce->gc.mtu = ble_att_mtu(conn_id);
       ce->gc.mtu = 1024;  // mtu;
       esp32_bt_addr_to_mgos(&cd.peer_ota_addr, &ce->gc.addr);
       SLIST_INIT(&ce->pending_nm);
@@ -354,17 +372,19 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
                     ev->disconnect.reason));
       struct esp32_bt_gatts_connection_entry *ce = find_connection(conn_id);
       if (ce == NULL) break;
+      SLIST_REMOVE(&s_conns, ce, esp32_bt_gatts_connection_entry, next);
       while (!SLIST_EMPTY(&ce->sessions)) {
         struct esp32_bt_gatts_session_entry *sse = SLIST_FIRST(&ce->sessions);
         esp32_bt_gatts_close_session(sse);
       }
       struct esp32_bt_gatts_pending_ind *pi, *pit;
       STAILQ_FOREACH_SAFE(pi, &ce->pending_inds, next, pit) {
-        mg_strfree(&pi->value);
-        memset(pi, 0, sizeof(*pi));
-        free(pi);
+        esp32_bt_gatts_pending_ind_free(pi);
       }
-      SLIST_REMOVE(&s_conns, ce, esp32_bt_gatts_connection_entry, next);
+      struct esp32_bt_gatts_pending_read *pr, *prt;
+      SLIST_FOREACH_SAFE(pr, &ce->pending_reads, next, prt) {
+        esp32_bt_gatts_pending_read_free(pr);
+      }
       free(ce);
       break;
     }
@@ -385,8 +405,7 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
         break;
       }
       while (!SLIST_EMPTY(&ce->pending_nm)) {
-        struct esp32_bt_gatts_pending_nm_entry *pnm =
-            SLIST_FIRST(&ce->pending_nm);
+        struct esp32_bt_gatts_pending_nm *pnm = SLIST_FIRST(&ce->pending_nm);
         SLIST_REMOVE_HEAD(&ce->pending_nm, next);
         struct mgos_bt_gatts_notify_mode_arg *narg = &pnm->nmarg;
         uint16_t ah = narg->handle;
@@ -439,7 +458,7 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
         ble_gap_conn_find(ch, &cd);
         struct ble_gap_sec_state *ss = &cd.sec_state;
         if (!ss->encrypted) {
-          struct esp32_bt_gatts_pending_nm_entry *pnm = calloc(1, sizeof(*pnm));
+          struct esp32_bt_gatts_pending_nm *pnm = calloc(1, sizeof(*pnm));
           pnm->nmarg = narg;
           SLIST_INSERT_HEAD(&sse->ce->pending_nm, pnm, next);
           if (!sse->ce->sec_in_flight) {
@@ -485,9 +504,8 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
       }
       if (remove) {
         STAILQ_REMOVE_HEAD(&ce->pending_inds, next);
-        mg_strfree(&pi->value);
         ce->ind_queue_len--;
-        free(pi);
+        esp32_bt_gatts_pending_ind_free(pi);
       }
       // Send next one or retry sending this one that failed.
       esp32_bt_gatts_send_next_ind_locked(ce);
@@ -531,17 +549,43 @@ static int esp32_gatts_get_att_err(enum mgos_bt_gatt_status st) {
   return BLE_ATT_ERR_UNLIKELY;
 }
 
-static int esp32_gatts_attr_access_cb(uint16_t conn_handle,
-                                      uint16_t attr_handle,
+// Workaround for https://github.com/apache/mynewt-nimble/issues/1090
+bool esp32_bt_gatts_send_resp_data(struct ble_gatt_access_ctxt *ctxt,
+                                   struct esp32_bt_gatts_session_entry *sse,
+                                   uint16_t ch, uint16_t ah, bool quiet) {
+  char buf[MGOS_BT_UUID_STR_LEN];
+  struct esp32_bt_gatts_pending_read *pr;
+  SLIST_FOREACH(pr, &sse->ce->pending_reads, next) {
+    if (pr->handle == ah) break;
+  }
+  if (pr == NULL) {
+    return 0;
+  }
+  size_t rdl = pr->data.len;
+  if (!quiet) {
+    LOG(LL_DEBUG, ("READ %s ch %d ah %u off %d rdl %d",
+                   mgos_bt_addr_to_str(&sse->gsc.gc.addr, 0, buf),
+                   sse->gsc.gc.conn_id, ch, (int) pr->read_offset, (int) rdl));
+  }
+  os_mbuf_append(ctxt->om, pr->data.buf, rdl);
+  pr->read_offset += (ble_att_mtu(ch) - 1);
+  if (pr->read_offset >= rdl) {
+    SLIST_REMOVE(&sse->ce->pending_reads, pr, esp32_bt_gatts_pending_read,
+                 next);
+    esp32_bt_gatts_pending_read_free(pr);
+  }
+  return rdl;
+}
+
+static int esp32_gatts_attr_access_cb(uint16_t ch, uint16_t ah,
                                       struct ble_gatt_access_ctxt *ctxt,
                                       void *arg) {
   int res = 0;
   char buf[MGOS_BT_UUID_STR_LEN], buf2[MGOS_BT_UUID_STR_LEN];
   struct esp32_bt_service_attr_info *ai = arg;
-  struct esp32_bt_gatts_session_entry *sse =
-      find_session(conn_handle, attr_handle, &ai);
+  struct esp32_bt_gatts_session_entry *sse = find_session(ch, ah, &ai);
   const ble_uuid_t *uuid = NULL;
-  LOG(LL_DEBUG, ("GATTS ATTR %d OP %d sse %p", attr_handle, ctxt->op, sse));
+  LOG(LL_DEBUG, ("GATTS ATTR %d OP %d sse %p", ah, ctxt->op, sse));
   if (sse == NULL) return BLE_ATT_ERR_UNLIKELY;
   switch (ctxt->op) {
     case BLE_GATT_ACCESS_OP_READ_CHR:
@@ -551,25 +595,29 @@ static int esp32_gatts_attr_access_cb(uint16_t conn_handle,
       if (uuid == NULL) {
         uuid = ctxt->dsc->uuid;
       }
+      if (esp32_bt_gatts_send_resp_data(ctxt, sse, ch, ah, false) > 0) {
+        // Still sending previous response.
+        break;
+      }
       struct mgos_bt_gatts_read_arg rarg = {
           .svc_uuid = sse->se->uuid,
-          .handle = attr_handle,
+          .handle = ah,
           .trans_id = 0,
           .offset = 0,
       };
       esp32_bt_uuid_to_mgos(uuid, &rarg.char_uuid);
       enum mgos_bt_gatt_status st =
           esp32_bt_gatts_call_handler(sse, ai, MGOS_BT_GATTS_EV_READ, &rarg);
+      res = esp32_gatts_get_att_err(st);
+      size_t rdl = 0;
+      if (res == 0) {
+        rdl = esp32_bt_gatts_send_resp_data(ctxt, sse, ch, ah, true);
+      }
       LOG(LL_DEBUG,
           ("READ %s ch %d ah %u (%s) -> %d %d",
            mgos_bt_addr_to_str(&sse->gsc.gc.addr, 0, buf), sse->gsc.gc.conn_id,
            rarg.handle, mgos_bt_uuid_to_str(&rarg.char_uuid, buf2), st,
-           (int) sse->resp_data.len));
-      res = esp32_gatts_get_att_err(st);
-      if (res == 0 && sse->resp_data.len > 0) {
-        os_mbuf_append(ctxt->om, sse->resp_data.buf, sse->resp_data.len);
-        mbuf_clear(&sse->resp_data);
-      }
+           (int) rdl));
       break;
     }
     case BLE_GATT_ACCESS_OP_WRITE_CHR:
@@ -592,7 +640,7 @@ static int esp32_gatts_attr_access_cb(uint16_t conn_handle,
       struct mgos_bt_gatts_write_arg warg = {
           .svc_uuid = sse->se->uuid,
           .char_uuid = ai->def.uuid_bin,
-          .handle = attr_handle,
+          .handle = ah,
           .data = mg_mk_str_n(data, data_len),
           .trans_id = 0,
           .offset = 0,
@@ -745,7 +793,6 @@ out:
     free(se->ble_descrs);
     free(se);
   }
-  LOG(LL_INFO, ("REG %d", res));
   return res;
 }
 
@@ -776,25 +823,29 @@ bool mgos_bt_gatts_unregister_service(const char *uuid_str) {
   // Stop and then delete the service.
   return (esp_ble_gatts_stop_service(se->svc_handle) == ESP_OK);
 }
-
-static void esp32_bt_gatts_send_resp(struct mgos_bt_gatts_conn *gsc,
-                                     uint16_t handle, uint32_t trans_id,
-                                     enum mgos_bt_gatt_status st) {
-  struct esp32_bt_gatts_session_entry *sse = find_session_by_gsc(gsc);
-  if (sse == NULL) return;
-  esp_gatt_status_t est = esp32_bt_gatt_get_status(st);
-  esp_gatt_rsp_t rsp = {.handle = handle};
-  LOG(LL_DEBUG, ("h %u tid %u st %d est %d", handle, trans_id, st, est));
-  esp_ble_gatts_send_response(s_gatts_if, gsc->gc.conn_id, trans_id, est, &rsp);
-}
 #endif
 
 void mgos_bt_gatts_send_resp_data(struct mgos_bt_gatts_conn *gsc,
                                   struct mgos_bt_gatts_read_arg *ra,
                                   struct mg_str data) {
+  if (data.len == 0) return;
+  mgos_rlock(s_lock);
   struct esp32_bt_gatts_session_entry *sse = find_session_by_gsc(gsc);
-  if (sse == NULL) return;
-  mbuf_append(&sse->resp_data, data.p, data.len);
+  if (sse == NULL) goto out;
+  struct esp32_bt_gatts_pending_read *pr = NULL;
+  SLIST_FOREACH(pr, &sse->ce->pending_reads, next) {
+    if (pr->handle == ra->handle) break;
+  }
+  if (pr == NULL) {
+    pr = calloc(1, sizeof(*pr));
+    if (pr == NULL) goto out;
+    pr->handle = ra->handle;
+    mbuf_init(&pr->data, 0);
+    SLIST_INSERT_HEAD(&sse->ce->pending_reads, pr, next);
+  }
+  mbuf_append(&pr->data, data.p, data.len);
+out:
+  mgos_runlock(s_lock);
 }
 
 void mgos_bt_gatts_notify(struct mgos_bt_gatts_conn *gsc,
