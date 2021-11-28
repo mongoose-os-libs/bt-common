@@ -24,6 +24,7 @@
 
 #include "common/mg_str.h"
 
+#include "mgos_freertos.h"
 #include "mgos_hal.h"
 #include "mgos_net.h"
 #include "mgos_sys_config.h"
@@ -36,6 +37,8 @@
 #include "services/gap/ble_svc_gap.h"
 
 uint8_t own_addr_type;
+static TaskHandle_t s_host_task_handle;
+static volatile bool s_mgos_handler_pending = false;
 
 void mgos_bt_addr_to_esp32(const struct mgos_bt_addr *in, ble_addr_t *out) {
   switch (in->type) {
@@ -184,19 +187,57 @@ static void esp32_bt_synced(void) {
   mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
 }
 
-static void ble_host_task(void *param) {
-  LOG(LL_DEBUG, ("BLE task %s", "running"));
-  nimble_port_run();
-  nimble_port_freertos_deinit();
-  LOG(LL_DEBUG, ("BLE task %s", "exiting"));
+// Handler callback that executes host events on the mgos task.
+// For efficiency, we process multiple events at a time.
+static void esp32_bt_mgos_handler(void *arg) {
+  int nevs = 1;
+  struct ble_npl_event *ev, **ep, *evs[20] = {arg};
+  struct ble_npl_eventq *q = nimble_port_get_dflt_eventq();
+  // Try to get more events from the queue.
+  for (ep = evs + 1; nevs < ARRAY_SIZE(evs); nevs++) {
+    ev = ble_npl_eventq_get(q, 0 /* no wait */);
+    if (ev == NULL) break;
+    *ep++ = ev;
+  }
+  // Release the other task.
+  s_mgos_handler_pending = false;
+  // Process the events.
+  for (ep = evs; nevs > 0; ep++, nevs--) {
+    ble_npl_event_run(*ep);
+  }
+}
+
+static void esp32_bt_host_task(void *param) {
+  if (param == NULL) {  // This is the dummy task.
+    nimble_port_freertos_deinit();
+    return;
+  }
+  struct ble_npl_event *ev;
+  struct ble_npl_eventq *q = nimble_port_get_dflt_eventq();
+  while (1) {
+    ev = ble_npl_eventq_get(q, BLE_NPL_TIME_FOREVER);
+    s_mgos_handler_pending = true;
+    while (!mgos_invoke_cb(esp32_bt_mgos_handler, ev, false /* from_isr */)) {
+    }
+    // Wait for the mgos task callback to run and process the event.
+    while (s_mgos_handler_pending) {
+      taskYIELD();
+    }
+  }
 }
 
 static void esp32_bt_start(void *arg) {
-  LOG(LL_DEBUG, ("BLE task %s", "starting"));
+  LOG(LL_DEBUG, ("BLE task %s %d", "starting", MGOS_TASK_PRIORITY));
   if (!esp32_bt_gatts_init()) {
     LOG(LL_ERROR, ("%s init failed", "GATTS"));
   }
-  nimble_port_freertos_init(ble_host_task);
+  // This creates the high-pri LL task and a host task.
+  // We don't use the latter because its priority is too high.
+  nimble_port_freertos_init(esp32_bt_host_task);
+  // Instead we create our own here with priority below the main mgos task.
+  xTaskCreatePinnedToCore(esp32_bt_host_task, "ble", 1024, (void *) 1,
+                          MGOS_TASK_PRIORITY - 1, &s_host_task_handle,
+                          NIMBLE_CORE);
   ble_hs_sched_start();
   (void) arg;
 }
