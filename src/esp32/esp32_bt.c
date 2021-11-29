@@ -133,7 +133,7 @@ static void mgos_bt_net_ev(int ev, void *evd, void *arg) {
   mgos_sys_config_set_bt_enable(false);
   char *msg = NULL;
   if (save_cfg(&mgos_sys_config, &msg)) {
-    // nimble_port_stop();
+    mgos_bt_stop();
   }
   (void) arg;
 }
@@ -149,7 +149,7 @@ bool mgos_bt_get_device_address(struct mgos_bt_addr *addr) {
   int is_nrpa = false;
   rc = ble_hs_id_copy_addr(own_addr_type, baddr.val, &is_nrpa);
   if (rc != 0) {
-    LOG(LL_ERROR, ("BLE addr error %d", rc));
+    LOG(LL_ERROR, ("BLE addr type %d error %d", own_addr_type, rc));
     return false;
   }
   switch (own_addr_type) {
@@ -175,7 +175,6 @@ static void esp32_bt_reset(int reason) {
 static void esp32_bt_synced(void) {
   int rc;
 
-  LOG(LL_INFO, ("BLE started"));
   s_state = ESP32_BT_STARTED;
 
   if (!s_should_be_running) {
@@ -198,7 +197,7 @@ static void esp32_bt_synced(void) {
         ("BLE Device Address: %s",
          mgos_bt_addr_to_str(&addr, MGOS_BT_ADDR_STRINGIFY_TYPE, addr_str)));
   }
-  mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
+  esp32_bt_gap_start_advertising();
 }
 
 // Handler callback that executes host events on the mgos task.
@@ -298,6 +297,8 @@ static bool esp32_bt_init(void) {
     goto out;
   }
 
+  mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
+
   LOG(LL_INFO, ("Bluetooth init ok, MTU %d, pairing %s, %d paired devices",
                 mgos_sys_config_get_bt_gatt_mtu(),
                 (mgos_bt_gap_get_pairing_enable() ? "enabled" : "disabled"),
@@ -351,6 +352,11 @@ bool mgos_bt_common_init(void) {
   if (!mgos_sys_config_get_bt_enable()) {
     LOG(LL_INFO, ("Bluetooth is disabled"));
     return true;
+  }
+  // TODO(rojer): Figure out random address support under NimBLE.
+  if (mgos_sys_config_get_bt_random_address()) {
+    LOG(LL_ERROR, ("Random addresses are not supported, using public"));
+    mgos_sys_config_set_bt_random_address(false);
   }
   esp32_bt_init();
   // Delay starting the stack until other libraries are initialized

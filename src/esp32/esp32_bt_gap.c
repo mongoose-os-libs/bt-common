@@ -26,6 +26,8 @@
 
 static bool s_adv_enable = false;
 static bool s_advertising = false;
+static struct mg_str s_adv_data = MG_NULL_STR;
+static struct mg_str s_scan_rsp_data = MG_NULL_STR;
 
 bool mgos_bt_gap_get_pairing_enable(void) {
   return ble_hs_cfg.sm_bonding;
@@ -178,7 +180,7 @@ static int esp32_bt_gap_event(struct ble_gap_event *ev, void *arg) {
     case BLE_GAP_EVENT_CONNECT:
       // Connect disables advertising. Resume, if it's enabled.
       s_advertising = false;
-      mgos_bt_gap_set_adv_enable(mgos_bt_gap_get_adv_enable());
+      esp32_bt_gap_start_advertising();
       // fallthrough
     case BLE_GAP_EVENT_DISCONNECT:
     case BLE_GAP_EVENT_ENC_CHANGE:
@@ -189,7 +191,7 @@ static int esp32_bt_gap_event(struct ble_gap_event *ev, void *arg) {
       break;
     case BLE_GAP_EVENT_ADV_COMPLETE:
       s_advertising = false;
-      mgos_bt_gap_set_adv_enable(mgos_bt_gap_get_adv_enable());
+      esp32_bt_gap_start_advertising();
       break;
     case BLE_GAP_EVENT_PASSKEY_ACTION:
       // TODO
@@ -207,159 +209,19 @@ static int esp32_bt_gap_event(struct ble_gap_event *ev, void *arg) {
       return BLE_GAP_REPEAT_PAIRING_RETRY;
     }
   }
-#if 0
-  struct ble_gap_conn_desc desc;
-  int rc;
-
-  switch (event->type) {
-    case BLE_GAP_EVENT_CONNECT:
-      LOG(LL_INFO, ("CONNECT %d %u", event->connect.status, event->connect.conn_handle));
-      if (event->connect.status == 0) {
-        rc = ble_gap_conn_find(event->connect.conn_handle, &desc);
-        assert(rc == 0);
-        //bleprph_print_conn_desc(&desc);
-      }
-      MODLOG_DFLT(INFO, "\n");
-
-      if (event->connect.status != 0) {
-        /* Connection failed; resume advertising. */
-        bleprph_advertise();
-      }
-      return 0;
-
-    case BLE_GAP_EVENT_DISCONNECT:
-      MODLOG_DFLT(INFO, "disconnect; reason=%d ", event->disconnect.reason);
-      bleprph_print_conn_desc(&event->disconnect.conn);
-      MODLOG_DFLT(INFO, "\n");
-
-      /* Connection terminated; resume advertising. */
-      bleprph_advertise();
-      return 0;
-
-    case BLE_GAP_EVENT_CONN_UPDATE:
-      /* The central has updated the connection parameters. */
-      MODLOG_DFLT(INFO, "connection updated; status=%d ",
-                  event->conn_update.status);
-      rc = ble_gap_conn_find(event->conn_update.conn_handle, &desc);
-      assert(rc == 0);
-      bleprph_print_conn_desc(&desc);
-      MODLOG_DFLT(INFO, "\n");
-      return 0;
-
-    case BLE_GAP_EVENT_ADV_COMPLETE:
-      MODLOG_DFLT(INFO, "advertise complete; reason=%d",
-                  event->adv_complete.reason);
-      bleprph_advertise();
-      return 0;
-
-    case BLE_GAP_EVENT_ENC_CHANGE:
-      /* Encryption has been enabled or disabled for this connection. */
-      MODLOG_DFLT(INFO, "encryption change event; status=%d ",
-                  event->enc_change.status);
-      rc = ble_gap_conn_find(event->enc_change.conn_handle, &desc);
-      assert(rc == 0);
-      bleprph_print_conn_desc(&desc);
-      MODLOG_DFLT(INFO, "\n");
-      return 0;
-
-    case BLE_GAP_EVENT_SUBSCRIBE:
-      MODLOG_DFLT(INFO,
-                  "subscribe event; conn_handle=%d attr_handle=%d "
-                  "reason=%d prevn=%d curn=%d previ=%d curi=%d\n",
-                  event->subscribe.conn_handle, event->subscribe.attr_handle,
-                  event->subscribe.reason, event->subscribe.prev_notify,
-                  event->subscribe.cur_notify, event->subscribe.prev_indicate,
-                  event->subscribe.cur_indicate);
-      return 0;
-
-    case BLE_GAP_EVENT_MTU:
-      MODLOG_DFLT(INFO, "mtu update event; conn_handle=%d cid=%d mtu=%d\n",
-                  event->mtu.conn_handle, event->mtu.channel_id,
-                  event->mtu.value);
-      return 0;
-
-    case BLE_GAP_EVENT_REPEAT_PAIRING:
-      /* We already have a bond with the peer, but it is attempting to
-       * establish a new secure link.  This app sacrifices security for
-       * convenience: just throw away the old bond and accept the new link.
-       */
-
-      /* Delete the old bond. */
-      rc = ble_gap_conn_find(event->repeat_pairing.conn_handle, &desc);
-      assert(rc == 0);
-      ble_store_util_delete_peer(&desc.peer_id_addr);
-
-      /* Return BLE_GAP_REPEAT_PAIRING_RETRY to indicate that the host should
-       * continue with the pairing operation.
-       */
-      return BLE_GAP_REPEAT_PAIRING_RETRY;
-
-    case BLE_GAP_EVENT_PASSKEY_ACTION:
-      ESP_LOGI(tag, "PASSKEY_ACTION_EVENT started \n");
-      struct ble_sm_io pkey = {0};
-      int key = 0;
-
-      if (event->passkey.params.action == BLE_SM_IOACT_DISP) {
-        pkey.action = event->passkey.params.action;
-        pkey.passkey = 123456;  // This is the passkey to be entered on peer
-        ESP_LOGI(tag, "Enter passkey %d on the peer side", pkey.passkey);
-        rc = ble_sm_inject_io(event->passkey.conn_handle, &pkey);
-        ESP_LOGI(tag, "ble_sm_inject_io result: %d\n", rc);
-      } else if (event->passkey.params.action == BLE_SM_IOACT_NUMCMP) {
-        ESP_LOGI(tag, "Passkey on device's display: %d",
-                 event->passkey.params.numcmp);
-        ESP_LOGI(tag,
-                 "Accept or reject the passkey through console in this format "
-                 "-> key Y or key N");
-        pkey.action = event->passkey.params.action;
-        if (scli_receive_key(&key)) {
-          pkey.numcmp_accept = key;
-        } else {
-          pkey.numcmp_accept = 0;
-          ESP_LOGE(tag, "Timeout! Rejecting the key");
-        }
-        rc = ble_sm_inject_io(event->passkey.conn_handle, &pkey);
-        ESP_LOGI(tag, "ble_sm_inject_io result: %d\n", rc);
-      } else if (event->passkey.params.action == BLE_SM_IOACT_OOB) {
-        static uint8_t tem_oob[16] = {0};
-        pkey.action = event->passkey.params.action;
-        for (int i = 0; i < 16; i++) {
-          pkey.oob[i] = tem_oob[i];
-        }
-        rc = ble_sm_inject_io(event->passkey.conn_handle, &pkey);
-        ESP_LOGI(tag, "ble_sm_inject_io result: %d\n", rc);
-      } else if (event->passkey.params.action == BLE_SM_IOACT_INPUT) {
-        ESP_LOGI(
-            tag,
-            "Enter the passkey through console in this format-> key 123456");
-        pkey.action = event->passkey.params.action;
-        if (scli_receive_key(&key)) {
-          pkey.passkey = key;
-        } else {
-          pkey.passkey = 0;
-          ESP_LOGE(tag, "Timeout! Passing 0 as the key");
-        }
-        rc = ble_sm_inject_io(event->passkey.conn_handle, &pkey);
-        ESP_LOGI(tag, "ble_sm_inject_io result: %d\n", rc);
-      }
-      return 0;
-  }
-#endif
   return 0;
 }
 
-bool mgos_bt_gap_set_scan_rsp_data(struct mg_str scan_rsp_data) {
-  return (ble_gap_adv_rsp_set_data((const uint8_t *) scan_rsp_data.p,
-                                   scan_rsp_data.len) == 0);
-}
-
-static bool start_advertising(void) {
+bool esp32_bt_gap_start_advertising(void) {
   int rc;
 
   if (s_advertising) return true;
   if (!s_adv_enable) return false;
+  if (!ble_hs_synced()) return false;
   const char *dev_name = mgos_sys_config_get_bt_dev_name();
-  if (dev_name == NULL) dev_name = mgos_sys_config_get_device_id();
+  if (dev_name == NULL) {
+    dev_name = mgos_sys_config_get_device_id();
+  }
   if (dev_name == NULL) {
     LOG(LL_ERROR, ("bt.dev_name or device.id must be set"));
     return false;
@@ -367,36 +229,51 @@ static bool start_advertising(void) {
   if (ble_svc_gap_device_name_set(dev_name) != 0) {
     return false;
   }
-  struct ble_hs_adv_fields fields = {
-      .flags = 0,
-
-      .name = (uint8_t *) dev_name,
-      .name_len = strlen(dev_name),
-      .name_is_complete = true,
-
-      .tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO,
-      .tx_pwr_lvl_is_present = true,
-  };
-  if ((rc = ble_gap_adv_set_fields(&fields)) != 0) {
-    LOG(LL_ERROR, ("ble_gap_adv_set_fields: %d", rc));
-    return false;
-  }
-  struct mg_str scan_rsp_data_hex =
-      mg_mk_str(mgos_sys_config_get_bt_scan_rsp_data_hex());
-  if (scan_rsp_data_hex.len > 0) {
-    struct mg_str scan_rsp_data = MG_NULL_STR;
-    json_scanf(scan_rsp_data_hex.p, scan_rsp_data_hex.len, "%H",
-               &scan_rsp_data.len, &scan_rsp_data.p);
-    if (scan_rsp_data.len > 0) {
-      if (scan_rsp_data.len <= MGOS_BT_GAP_MAX_SCAN_RSP_DATA_LEN) {
-        mgos_bt_gap_set_scan_rsp_data(scan_rsp_data);
-        LOG(LL_INFO, ("Scan rsp len %d", scan_rsp_data.len));
-      } else {
-        LOG(LL_ERROR, ("Scan response data too long (%d), max is %d",
-                       scan_rsp_data.len, MGOS_BT_GAP_MAX_SCAN_RSP_DATA_LEN));
-      }
+  if (s_adv_data.len > 0) {
+    if ((rc = ble_gap_adv_set_data((const uint8_t *) s_adv_data.p,
+                                   s_adv_data.len)) != 0) {
+      LOG(LL_ERROR, ("ble_gap_adv_set_data: %d", rc));
+      return false;
     }
-    mg_strfree(&scan_rsp_data);
+  } else {
+    struct ble_hs_adv_fields fields = {
+        .flags = 0,
+
+        .name = (uint8_t *) dev_name,
+        .name_len = strlen(dev_name),
+        .name_is_complete = true,
+
+        .tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO,
+        .tx_pwr_lvl_is_present = true,
+    };
+    if ((rc = ble_gap_adv_set_fields(&fields)) != 0) {
+      LOG(LL_ERROR, ("ble_gap_adv_set_fields: %d", rc));
+      return false;
+    }
+  }
+  if (s_scan_rsp_data.len > 0) {
+    if ((rc = ble_gap_adv_rsp_set_data((const uint8_t *) s_scan_rsp_data.p,
+                                       s_scan_rsp_data.len)) != 0) {
+      LOG(LL_ERROR, ("ble_gap_adv_rsp_set_data: %d", rc));
+      return false;
+    }
+  } else {
+    struct mg_str scan_rsp_data_hex =
+        mg_mk_str(mgos_sys_config_get_bt_scan_rsp_data_hex());
+    if (scan_rsp_data_hex.len > 0) {
+      struct mg_str scan_rsp_data = MG_NULL_STR;
+      json_scanf(scan_rsp_data_hex.p, scan_rsp_data_hex.len, "%H",
+                 &scan_rsp_data.len, &scan_rsp_data.p);
+      if (scan_rsp_data.len > 0) {
+        if (scan_rsp_data.len <= MGOS_BT_GAP_MAX_SCAN_RSP_DATA_LEN) {
+          mgos_bt_gap_set_scan_rsp_data(scan_rsp_data);
+        } else {
+          LOG(LL_ERROR, ("Scan response data too long (%d), max is %d",
+                         scan_rsp_data.len, MGOS_BT_GAP_MAX_SCAN_RSP_DATA_LEN));
+        }
+      }
+      mg_strfree(&scan_rsp_data);
+    }
   }
   if ((rc = ble_hs_id_infer_auto(0, &own_addr_type)) != 0) {
     LOG(LL_ERROR, ("ble_hs_id_infer_auto: %d", rc));
@@ -411,9 +288,10 @@ static bool start_advertising(void) {
   };
   if ((rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &adv_params,
                               esp32_bt_gap_event, NULL)) != 0) {
-    LOG(LL_ERROR, ("ble_hs_id_infer_auto: %d", rc));
+    LOG(LL_ERROR, ("ble_gap_adv_start: %d", rc));
     return false;
   }
+  s_advertising = true;
   struct mgos_bt_addr addr;
   if (mgos_bt_get_device_address(&addr)) {
     char addr_str[MGOS_BT_ADDR_STR_LEN] = {0};
@@ -424,16 +302,35 @@ static bool start_advertising(void) {
   return true;
 }
 
-static bool stop_advertising(void) {
+static bool esp32_bt_gap_stop_advertising(void) {
   if (!s_advertising) return true;
-  return (ble_gap_adv_stop() == 0);
+  bool res = (ble_gap_adv_stop() == 0);
+  if (res) s_advertising = false;
+  return res;
 }
 
 bool mgos_bt_gap_get_adv_enable(void) {
   return s_adv_enable;
 }
 
+bool mgos_bt_gap_set_adv_data(struct mg_str adv_data) {
+  if (mg_strcmp(adv_data, s_adv_data) == 0) return true;
+  mg_strfree(&s_adv_data);
+  s_adv_data = mg_strdup(adv_data);
+  return (ble_gap_adv_set_data((const uint8_t *) s_adv_data.p,
+                               s_adv_data.len) == 0);
+}
+
+bool mgos_bt_gap_set_scan_rsp_data(struct mg_str scan_rsp_data) {
+  if (mg_strcmp(scan_rsp_data, s_scan_rsp_data) == 0) return true;
+  mg_strfree(&s_scan_rsp_data);
+  s_scan_rsp_data = mg_strdup(scan_rsp_data);
+  return (ble_gap_adv_rsp_set_data((const uint8_t *) s_scan_rsp_data.p,
+                                   s_scan_rsp_data.len) == 0);
+}
+
 bool mgos_bt_gap_set_adv_enable(bool adv_enable) {
   s_adv_enable = adv_enable;
-  return (s_adv_enable ? start_advertising() : stop_advertising());
+  return (s_adv_enable ? esp32_bt_gap_start_advertising()
+                       : esp32_bt_gap_stop_advertising());
 }

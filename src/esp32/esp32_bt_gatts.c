@@ -665,12 +665,12 @@ static int esp32_bt_register_service(struct esp32_bt_gatts_service_entry *se) {
   int rc = 0;
   rc = ble_gatts_count_cfg(&se->ble_svc_def[0]);
   if (rc != 0) {
-    LOG(LL_INFO, ("Count failed"));
+    LOG(LL_ERROR, ("Count failed"));
     return rc;
   }
   rc = ble_gatts_add_svcs(&se->ble_svc_def[0]);
   if (rc != 0) {
-    LOG(LL_INFO, ("Add failed"));
+    LOG(LL_ERROR, ("Add failed"));
     return rc;
   }
   return rc;
@@ -790,7 +790,7 @@ bool mgos_bt_gatts_register_service(const char *svc_uuid,
   mgos_rlock(s_lock);
   SLIST_INSERT_HEAD(&s_svcs, se, next);
   mgos_runlock(s_lock);
-  // TODO: restart if needed.
+  esp32_bt_restart();
   res = true;
 out:
   if (!res && se != NULL) {
