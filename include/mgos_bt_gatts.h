@@ -48,6 +48,7 @@ struct mgos_bt_gatts_conn {
 struct mgos_bt_gatts_read_arg {
   struct mgos_bt_uuid svc_uuid;
   struct mgos_bt_uuid char_uuid;
+  struct mgos_bt_uuid desc_uuid;
   uint16_t handle;
   uint32_t trans_id;
   uint16_t offset;
@@ -56,6 +57,7 @@ struct mgos_bt_gatts_read_arg {
 struct mgos_bt_gatts_write_arg {
   struct mgos_bt_uuid svc_uuid;
   struct mgos_bt_uuid char_uuid;
+  struct mgos_bt_uuid desc_uuid;
   uint16_t handle;
   uint32_t trans_id;
   uint16_t offset;
@@ -71,7 +73,7 @@ struct mgos_bt_gatts_notify_mode_arg {
 };
 
 struct mgos_bt_gatts_ind_confirm_arg {
-  struct mgos_bt_uuid uuid;
+  struct mgos_bt_uuid char_uuid;
   uint16_t handle;
   bool ok;
 };

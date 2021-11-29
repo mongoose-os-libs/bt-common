@@ -50,7 +50,7 @@ int mgos_bt_addr_cmp(const struct mgos_bt_addr *a,
   return memcmp(a->addr, b->addr, sizeof(b->addr));
 }
 
-bool mgos_bt_addr_is_null(const struct mgos_bt_addr *addr) {
+bool mgos_bt_addr_is_zero(const struct mgos_bt_addr *addr) {
   const struct mgos_bt_addr null_addr = {0};
   return (mgos_bt_addr_cmp(addr, &null_addr) == 0);
 }
@@ -119,6 +119,10 @@ void mgos_bt_uuid128_from_bytes(const uint8_t *bytes, bool reverse,
   for (int i = 0; i < 16; i++) {
     uuid->uuid.uuid128[i] = bytes[reverse ? 15 - i : i];
   }
+}
+
+bool mgos_bt_uuid_is_zero(const struct mgos_bt_uuid *uuid) {
+  return (uuid->len == 0);
 }
 
 bool mgos_bt_uuid_eq(const struct mgos_bt_uuid *a,
