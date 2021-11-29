@@ -39,6 +39,16 @@
 uint8_t own_addr_type;
 static TaskHandle_t s_host_task_handle;
 static volatile bool s_mgos_handler_pending = false;
+static bool s_inited = false;
+static bool s_should_be_running = false;
+enum esp32_bt_state {
+  ESP32_BT_STOPPED = 0,
+  ESP32_BT_STARTING = 1,
+  ESP32_BT_STARTED = 2,
+  ESP32_BT_STOPPING = 3,
+};
+static enum esp32_bt_state s_state = ESP32_BT_STOPPED;
+struct ble_hs_stop_listener s_stop_listener;
 
 void mgos_bt_addr_to_esp32(const struct mgos_bt_addr *in, ble_addr_t *out) {
   switch (in->type) {
@@ -123,7 +133,7 @@ static void mgos_bt_net_ev(int ev, void *evd, void *arg) {
   mgos_sys_config_set_bt_enable(false);
   char *msg = NULL;
   if (save_cfg(&mgos_sys_config, &msg)) {
-    nimble_port_stop();
+    // nimble_port_stop();
   }
   (void) arg;
 }
@@ -165,6 +175,14 @@ static void esp32_bt_reset(int reason) {
 static void esp32_bt_synced(void) {
   int rc;
 
+  LOG(LL_INFO, ("BLE started"));
+  s_state = ESP32_BT_STARTED;
+
+  if (!s_should_be_running) {
+    mgos_bt_stop();
+    return;
+  }
+
   bool privacy = mgos_sys_config_get_bt_random_address();
 
   rc = ble_hs_util_ensure_addr(privacy);
@@ -179,10 +197,6 @@ static void esp32_bt_synced(void) {
     LOG(LL_INFO,
         ("BLE Device Address: %s",
          mgos_bt_addr_to_str(&addr, MGOS_BT_ADDR_STRINGIFY_TYPE, addr_str)));
-  }
-
-  if (!esp32_bt_gap_init()) {
-    LOG(LL_ERROR, ("%s init failed", "GAP"));
   }
   mgos_bt_gap_set_adv_enable(mgos_sys_config_get_bt_adv_enable());
 }
@@ -226,30 +240,14 @@ static void esp32_bt_host_task(void *param) {
   }
 }
 
-static void esp32_bt_start(void *arg) {
-  LOG(LL_DEBUG, ("BLE task %s %d", "starting", MGOS_TASK_PRIORITY));
-  if (!esp32_bt_gatts_init()) {
-    LOG(LL_ERROR, ("%s init failed", "GATTS"));
-  }
-  // This creates the high-pri LL task and a host task.
-  // We don't use the latter because its priority is too high.
-  nimble_port_freertos_init(esp32_bt_host_task);
-  // Instead we create our own here with priority below the main mgos task.
-  xTaskCreatePinnedToCore(esp32_bt_host_task, "ble", 1024, (void *) 1,
-                          MGOS_TASK_PRIORITY - 1, &s_host_task_handle,
-                          NIMBLE_CORE);
-  ble_hs_sched_start();
-  (void) arg;
-}
-
 extern void ble_store_config_init(void);
 
-bool mgos_bt_common_init(void) {
-  bool ret = false;
-  if (!mgos_sys_config_get_bt_enable()) {
-    LOG(LL_INFO, ("Bluetooth is disabled"));
+static bool esp32_bt_init(void) {
+  if (s_inited) {
     return true;
   }
+
+  bool ret = false;
 
   if (mgos_sys_config_get_bt_dev_name() != NULL) {
     char *dev_name = strdup(mgos_sys_config_get_bt_dev_name());
@@ -260,7 +258,7 @@ bool mgos_bt_common_init(void) {
 
   esp_err_t err = esp_nimble_hci_and_controller_init();
   if (err) {
-    LOG(LL_ERROR, ("BT init failed: %d", err));
+    LOG(LL_ERROR, ("BLE init failed: %d", err));
     goto out;
   }
 
@@ -268,7 +266,6 @@ bool mgos_bt_common_init(void) {
 
   ble_hs_cfg.reset_cb = esp32_bt_reset;
   ble_hs_cfg.sync_cb = esp32_bt_synced;
-  // ble_hs_cfg.gatts_register_cb = gatt_svr_register_cb;
   ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
   ble_hs_cfg.sm_sc = true;
@@ -279,31 +276,27 @@ bool mgos_bt_common_init(void) {
 
   ble_att_set_preferred_mtu(mgos_sys_config_get_bt_gatt_mtu());
 
-#if 0
-  if (!esp32_bt_gattc_init()) {
-    LOG(LL_ERROR, ("GATTC init failed"));
-    ret = false;
-    goto out;
-  }
-
-  if (!esp32_bt_gatts_init()) {
-    LOG(LL_ERROR, ("GATTS init failed"));
-    ret = false;
-    goto out;
-  }
-#endif
   if (!mgos_sys_config_get_bt_keep_enabled()) {
     mgos_event_add_group_handler(MGOS_EVENT_GRP_NET, mgos_bt_net_ev, NULL);
   }
 
   ble_store_config_init();
 
-  // Delay starting the stack until other libraries are initialized
-  // and services registered.
-  mgos_invoke_cb(esp32_bt_start, NULL, false /* from_isr */);
+  // This creates the high-pri LL task and a host task.
+  // We don't use the latter because its priority is too high.
+  nimble_port_freertos_init(esp32_bt_host_task);
+  // Instead we create our own here with priority below the main mgos task.
+  xTaskCreatePinnedToCore(esp32_bt_host_task, "ble", 1024, (void *) 1,
+                          MGOS_TASK_PRIORITY - 1, &s_host_task_handle,
+                          NIMBLE_CORE);
 
   // Default INFO level log is too spammy.
   esp_log_level_set("NimBLE", ESP_LOG_WARN);
+
+  if (!esp32_bt_gatts_init()) {
+    LOG(LL_ERROR, ("%s init failed", "GATTS"));
+    goto out;
+  }
 
   LOG(LL_INFO, ("Bluetooth init ok, MTU %d, pairing %s, %d paired devices",
                 mgos_sys_config_get_bt_gatt_mtu(),
@@ -312,5 +305,55 @@ bool mgos_bt_common_init(void) {
   ret = true;
 
 out:
+  s_inited = ret;
   return ret;
+}
+
+static void ble_hs_stop_cb(int status, void *arg) {
+  LOG(LL_INFO, ("BLE stopped, status %d", status));
+  s_state = ESP32_BT_STOPPED;
+  if (s_should_be_running) mgos_bt_start();
+  (void) arg;
+}
+
+bool mgos_bt_start(void) {
+  s_should_be_running = true;
+  if (s_state != ESP32_BT_STOPPED) return true;
+  if (!esp32_bt_init()) return false;
+  s_state = ESP32_BT_STARTING;
+  if (!esp32_bt_gatts_start()) {
+    LOG(LL_ERROR, ("%s start failed", "GATTS"));
+    return false;
+  }
+  ble_hs_sched_start();
+  return true;
+}
+
+bool mgos_bt_stop(void) {
+  s_should_be_running = false;
+  if (s_state != ESP32_BT_STARTED) return true;
+  s_state = ESP32_BT_STOPPING;
+  return (ble_hs_stop(&s_stop_listener, ble_hs_stop_cb, NULL) == 0);
+}
+
+void esp32_bt_restart(void) {
+  if (!s_should_be_running) return;
+  mgos_bt_stop();
+  s_should_be_running = true;
+}
+
+static void esp32_bt_start(void *arg) {
+  mgos_bt_start();
+  (void) arg;
+}
+
+bool mgos_bt_common_init(void) {
+  if (!mgos_sys_config_get_bt_enable()) {
+    LOG(LL_INFO, ("Bluetooth is disabled"));
+    return true;
+  }
+  esp32_bt_init();
+  // Delay starting the stack until other libraries are initialized
+  // and services registered to avoid unnecessary restarts.
+  return mgos_invoke_cb(esp32_bt_start, NULL, false /* from_isr */);
 }

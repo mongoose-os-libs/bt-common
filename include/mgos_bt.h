@@ -78,6 +78,10 @@ void mgos_event_trigger_schedule(int ev, void *ev_data, size_t data_len);
 
 bool mgos_bt_get_device_address(struct mgos_bt_addr *addr);
 
+// Stops the BT stack. Async.
+bool mgos_bt_start(void);
+bool mgos_bt_stop(void);
+
 #ifdef __cplusplus
 }
 #endif

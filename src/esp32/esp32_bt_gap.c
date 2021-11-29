@@ -437,7 +437,3 @@ bool mgos_bt_gap_set_adv_enable(bool adv_enable) {
   s_adv_enable = adv_enable;
   return (s_adv_enable ? start_advertising() : stop_advertising());
 }
-
-bool esp32_bt_gap_init(void) {
-  return true;
-}

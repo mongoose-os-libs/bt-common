@@ -30,13 +30,16 @@ extern "C" {
 bool esp32_bt_is_scanning(void);
 bool esp32_bt_gattc_init(void);
 
-bool esp32_bt_gap_init(void);
 bool esp32_bt_gatts_init(void);
+bool esp32_bt_gatts_start(void);
+void esp32_bt_restart(void);
 
 void esp32_bt_set_is_advertising(bool is_advertising);
 
 struct ble_gap_event;
 int esp32_bt_gatts_event(const struct ble_gap_event *event, void *arg);
+
+extern uint8_t own_addr_type;
 
 #ifdef __cplusplus
 }

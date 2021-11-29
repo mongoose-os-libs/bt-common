@@ -676,17 +676,23 @@ static int esp32_bt_register_service(struct esp32_bt_gatts_service_entry *se) {
   return rc;
 }
 
-static void esp32_bt_register_services(void) {
+static bool esp32_bt_register_services(void) {
   char buf[MGOS_BT_UUID_STR_LEN];
+  int rc = ble_gatts_reset();
+  if (rc != 0) {
+    LOG(LL_ERROR, ("ble_gatts_reset() failed: %d", rc));
+    return false;
+  }
   struct esp32_bt_gatts_service_entry *se;
   SLIST_FOREACH(se, &s_svcs, next) {
-    int rc = esp32_bt_register_service(se);
+    rc = esp32_bt_register_service(se);
     if (rc != 0) {
       LOG(LL_ERROR, ("Failed to register BT service %s: %d",
                      mgos_bt_uuid_to_str(&se->uuid, buf), rc));
-      continue;
+      return false;
     }
   }
+  return true;
 }
 
 bool mgos_bt_gatts_register_service(const char *svc_uuid,
@@ -796,7 +802,6 @@ out:
   return res;
 }
 
-#if 0
 bool mgos_bt_gatts_unregister_service(const char *uuid_str) {
   struct esp32_bt_gatts_service_entry *se;
   struct mgos_bt_uuid uuid;
@@ -820,10 +825,10 @@ bool mgos_bt_gatts_unregister_service(const char *uuid_str) {
   }
   free(se->attrs);
   free(se);
-  // Stop and then delete the service.
-  return (esp_ble_gatts_stop_service(se->svc_handle) == ESP_OK);
+  // Need to restart the stack for this to take effect.
+  esp32_bt_restart();
+  return true;
 }
-#endif
 
 void mgos_bt_gatts_send_resp_data(struct mgos_bt_gatts_conn *gsc,
                                   struct mgos_bt_gatts_read_arg *ra,
@@ -882,12 +887,15 @@ void mgos_bt_gatts_notify_uuid(struct mgos_bt_gatts_conn *gsc,
   }
 }
 
+bool esp32_bt_gatts_start(void) {
+  LOG(LL_INFO, ("GATTS start, synced? %d", ble_hs_synced()));
+  return esp32_bt_register_services();
+}
+
 bool esp32_bt_gatts_init(void) {
-  LOG(LL_INFO, ("GATTS init, synced? %d", ble_hs_synced()));
   ble_hs_cfg.gatts_register_cb = esp32_gatts_register_cb;
   if (s_lock == NULL) {
     s_lock = mgos_rlock_create();
   }
-  esp32_bt_register_services();
   return true;
 }
