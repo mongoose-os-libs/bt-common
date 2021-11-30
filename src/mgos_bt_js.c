@@ -118,7 +118,7 @@ static const struct mjs_c_struct_member gattc_discovery_result_arg_def[] = {
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
     {"prop", offsetof(struct mgos_bt_gattc_discovery_result_arg, prop),
      MJS_STRUCT_FIELD_TYPE_UINT8, NULL},
-    {NULL, 0, MJS_STRUCT_FIELD_TYPE_INVALID, NULL},
+    {NULL},
 };
 
 const struct mjs_c_struct_member *mgos_bt_gattc_js_get_discovery_result_arg_def(
@@ -133,7 +133,7 @@ static const struct mjs_c_struct_member gattc_read_result_def[] = {
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
     {"data", offsetof(struct mgos_bt_gattc_read_result, data),
      MJS_STRUCT_FIELD_TYPE_MG_STR, NULL},
-    {NULL, 0, MJS_STRUCT_FIELD_TYPE_INVALID, NULL},
+    {NULL},
 };
 
 const struct mjs_c_struct_member *mgos_bt_gattc_js_get_read_result_def(void) {
@@ -149,13 +149,15 @@ static const struct mjs_c_struct_member gatts_read_arg_def[] = {
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
     {"char_uuid", offsetof(struct mgos_bt_gatts_read_arg, char_uuid),
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
+    {"desc_uuid", offsetof(struct mgos_bt_gatts_read_arg, desc_uuid),
+     MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
     {"handle", offsetof(struct mgos_bt_gatts_read_arg, handle),
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
     {"transId", offsetof(struct mgos_bt_gatts_read_arg, trans_id),
      MJS_STRUCT_FIELD_TYPE_INT, NULL},
     {"offset", offsetof(struct mgos_bt_gatts_read_arg, offset),
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
-    {NULL, 0, MJS_STRUCT_FIELD_TYPE_INVALID, NULL},
+    {NULL},
 };
 
 const struct mjs_c_struct_member *mgos_bt_gatts_js_get_read_arg_def(void) {
@@ -163,9 +165,11 @@ const struct mjs_c_struct_member *mgos_bt_gatts_js_get_read_arg_def(void) {
 }
 
 static const struct mjs_c_struct_member gatts_write_arg_def[] = {
-    {"svc_uuid", offsetof(struct mgos_bt_gatts_read_arg, svc_uuid),
+    {"svc_uuid", offsetof(struct mgos_bt_gatts_write_arg, svc_uuid),
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
-    {"char_uuid", offsetof(struct mgos_bt_gatts_read_arg, char_uuid),
+    {"char_uuid", offsetof(struct mgos_bt_gatts_write_arg, char_uuid),
+     MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
+    {"desc_uuid", offsetof(struct mgos_bt_gatts_write_arg, desc_uuid),
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
     {"handle", offsetof(struct mgos_bt_gatts_write_arg, handle),
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
@@ -175,7 +179,7 @@ static const struct mjs_c_struct_member gatts_write_arg_def[] = {
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
     {"data", offsetof(struct mgos_bt_gatts_write_arg, data),
      MJS_STRUCT_FIELD_TYPE_MG_STR, NULL},
-    {NULL, 0, MJS_STRUCT_FIELD_TYPE_INVALID, NULL},
+    {NULL},
 };
 
 const struct mjs_c_struct_member *mgos_bt_gatts_js_get_write_arg_def(void) {
@@ -189,15 +193,15 @@ static mjs_val_t nm_to_int(struct mjs *mjs, void *ap) {
 }
 
 static const struct mjs_c_struct_member gatts_notify_mode_arg_def[] = {
-    {"svc_uuid", offsetof(struct mgos_bt_gatts_read_arg, svc_uuid),
+    {"svc_uuid", offsetof(struct mgos_bt_gatts_notify_mode_arg, svc_uuid),
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
-    {"char_uuid", offsetof(struct mgos_bt_gatts_read_arg, char_uuid),
+    {"char_uuid", offsetof(struct mgos_bt_gatts_notify_mode_arg, char_uuid),
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
     {"handle", offsetof(struct mgos_bt_gatts_notify_mode_arg, handle),
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
     {"mode", offsetof(struct mgos_bt_gatts_notify_mode_arg, mode),
      MJS_STRUCT_FIELD_TYPE_CUSTOM, nm_to_int},
-    {NULL, 0, MJS_STRUCT_FIELD_TYPE_INVALID, NULL},
+    {NULL},
 };
 
 const struct mjs_c_struct_member *mgos_bt_gatts_js_get_notify_mode_arg_def(
