@@ -666,7 +666,7 @@ static int esp32_gatts_attr_access_cb(uint16_t ch, uint16_t ah,
       }
       enum mgos_bt_gatt_status st =
           esp32_bt_gatts_call_handler(sse, ai, MGOS_BT_GATTS_EV_WRITE, &warg);
-      if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
+      if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
         LOG(LL_DEBUG, ("WRITE_CHR %s ch %d ah %u (%s) len %d -> %d",
                        mgos_bt_addr_to_str(&sse->gsc.gc.addr, 0, buf1),
                        sse->gsc.gc.conn_id, warg.handle,
@@ -677,7 +677,7 @@ static int esp32_gatts_attr_access_cb(uint16_t ch, uint16_t ah,
                        mgos_bt_addr_to_str(&sse->gsc.gc.addr, 0, buf1),
                        sse->gsc.gc.conn_id, cai->handle, warg.handle,
                        mgos_bt_uuid_to_str(&warg.char_uuid, buf2),
-                       mgos_bt_uuid_to_str(&warg.desc_uuid, buf2),
+                       mgos_bt_uuid_to_str(&warg.desc_uuid, buf3),
                        (int) warg.data.len, st));
       }
       res = esp32_gatts_get_att_err(st);
