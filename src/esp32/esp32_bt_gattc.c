@@ -15,56 +15,27 @@
  * limitations under the License.
  */
 
+#include "mgos_bt_gattc.h"
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "esp_bt.h"
-#include "esp_bt_defs.h"
-#include "esp_gap_ble_api.h"
-#include "esp_gatt_common_api.h"
-#include "esp_gattc_api.h"
+#include "mgos.h"
 
-#include "common/cs_dbg.h"
-#include "common/queue.h"
-
-#include "mgos_bt_gattc.h"
-#include "mgos_system.h"
+#include "host/ble_gap.h"
+#include "host/ble_gatt.h"
 
 #include "esp32_bt.h"
 #include "esp32_bt_internal.h"
 
-static esp_gatt_if_t s_gattc_if = 0;
-
-static const esp_bt_uuid_t notify_descr_uuid = {
-    .len = ESP_UUID_LEN_16,
-    .uuid =
-        {
-            .uuid16 = ESP_GATT_UUID_CHAR_CLIENT_CONFIG,
-        },
-};
-
-// TODO storing this in a global variable makes multiple concurrent subscribe
-// operations unreliable
-static uint16_t last_subscribe_conn_id = 0;
-
 struct conn {
   struct mgos_bt_gatt_conn c;
   bool connected;
-  esp_gatt_if_t iface;
   SLIST_ENTRY(conn) next;
 };
 
 static SLIST_HEAD(s_conns, conn) s_conns = SLIST_HEAD_INITIALIZER(s_conns);
-
-static struct conn *find_by_addr(const esp_bd_addr_t addr) {
-  struct conn *conn;
-  SLIST_FOREACH(conn, &s_conns, next) {
-    if (memcmp(addr, conn->c.addr.addr, sizeof(conn->c.addr.addr)) == 0)
-      return conn;
-  }
-  return NULL;
-}
 
 static struct conn *find_by_conn_id(int conn_id) {
   struct conn *conn;
@@ -75,57 +46,35 @@ static struct conn *find_by_conn_id(int conn_id) {
 }
 
 bool mgos_bt_gattc_read(int conn_id, uint16_t handle) {
-  if (esp32_bt_is_scanning()) return false;
-  esp_err_t err = esp_ble_gattc_read_char(s_gattc_if, conn_id, handle, 0);
-  LOG(LL_DEBUG, ("READ %d: %d", conn_id, err));
-  return err == ESP_OK;
+  return false;
 }
 
 bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle) {
-  if (esp32_bt_is_scanning()) return false;
   struct conn *conn = find_by_conn_id(conn_id);
   if (conn == NULL) return false;
-  last_subscribe_conn_id = conn_id;
-  esp_err_t err =
-      esp_ble_gattc_register_for_notify(conn->iface, conn->c.addr.addr, handle);
-  LOG(LL_DEBUG, ("REG_NOTIF %d: %d", conn_id, err));
-  return err == ESP_OK;
+  return false;
 }
 
 bool mgos_bt_gattc_write(int conn_id, uint16_t handle, struct mg_str data,
                          bool resp_required) {
-  if (esp32_bt_is_scanning()) return false;
   struct conn *conn = find_by_conn_id(conn_id);
   if (conn == NULL) return false;
-  esp_gatt_write_type_t wt =
-      (resp_required ? ESP_GATT_WRITE_TYPE_RSP : ESP_GATT_WRITE_TYPE_NO_RSP);
-  esp_err_t err = esp_ble_gattc_write_char(conn->iface, conn_id, handle,
-                                           data.len, (void *) data.p, wt, 0);
-  LOG(LL_DEBUG, ("WRITE %d: %d", conn_id, err));
-  return err == ESP_OK;
+  return false;
 }
 
 bool mgos_bt_gattc_connect(const struct mgos_bt_addr *addr) {
-  char buf[MGOS_BT_ADDR_STR_LEN];
-  uint8_t *a = (uint8_t *) addr->addr;
-  if (esp32_bt_is_scanning()) return false;
-  esp_err_t err = esp_ble_gattc_open(s_gattc_if, a, addr->type - 1, true);
-  LOG(LL_DEBUG,
-      ("CONNECT %s: %d",
-       mgos_bt_addr_to_str(addr, MGOS_BT_ADDR_STRINGIFY_TYPE, buf), err));
-  return err == ESP_OK;
+  return false;
 }
 
 bool mgos_bt_gattc_discover(int conn_id) {
-  esp_err_t err = esp_ble_gattc_search_service(s_gattc_if, conn_id, NULL);
-  LOG(LL_DEBUG, ("SRCH %d: %d", conn_id, err));
-  return err == ESP_OK;
+  return false;
 }
 
 bool mgos_bt_gattc_disconnect(int conn_id) {
-  return (esp_ble_gattc_close(s_gattc_if, conn_id) == ESP_GATT_OK);
+  return false;
 }
 
+#if 0
 static void disconnect(int conn_id, const esp_bd_addr_t addr) {
   char buf[MGOS_BT_ADDR_STR_LEN];
   struct conn *conn;
@@ -490,8 +439,4 @@ static void esp32_bt_gattc_ev(esp_gattc_cb_event_t ev, esp_gatt_if_t iface,
     }
   }
 }
-
-bool esp32_bt_gattc_init(void) {
-  return (esp_ble_gattc_register_callback(esp32_bt_gattc_ev) == ESP_OK &&
-          esp_ble_gattc_app_register(0) == ESP_OK);
-}
+#endif

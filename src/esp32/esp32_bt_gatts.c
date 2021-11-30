@@ -287,7 +287,6 @@ static void esp32_bt_gatts_create_sessions(
     sse->ce = ce;
     sse->se = se;
     sse->gsc.gc = ce->gc;
-    sse->gsc.svc_uuid = se->uuid;
     enum mgos_bt_gatt_status st =
         esp32_bt_gatts_call_handler(sse, NULL, MGOS_BT_GATTS_EV_CONNECT, NULL);
     if (st != MGOS_BT_GATT_STATUS_OK) {
