@@ -30,6 +30,7 @@
 #include "mgos_sys_config.h"
 
 #include "esp_nimble_hci.h"
+#include "freertos/semphr.h"
 #include "host/ble_hs.h"
 #include "host/util/util.h"
 #include "nimble/nimble_port.h"
@@ -37,10 +38,11 @@
 #include "services/gap/ble_svc_gap.h"
 
 uint8_t own_addr_type;
-static TaskHandle_t s_host_task_handle;
-static volatile bool s_mgos_handler_pending = false;
 static bool s_inited = false;
 static bool s_should_be_running = false;
+static TaskHandle_t s_host_task_handle;
+static SemaphoreHandle_t s_sem = NULL;
+
 enum esp32_bt_state {
   ESP32_BT_STOPPED = 0,
   ESP32_BT_STARTING = 1,
@@ -213,7 +215,7 @@ static void esp32_bt_mgos_handler(void *arg) {
     *ep++ = ev;
   }
   // Release the other task.
-  s_mgos_handler_pending = false;
+  xSemaphoreGive(s_sem);
   // Process the events.
   for (ep = evs; nevs > 0; ep++, nevs--) {
     ble_npl_event_run(*ep);
@@ -225,17 +227,15 @@ static void esp32_bt_host_task(void *param) {
     nimble_port_freertos_deinit();
     return;
   }
+  s_sem = xSemaphoreCreateBinary();
   struct ble_npl_event *ev;
   struct ble_npl_eventq *q = nimble_port_get_dflt_eventq();
   while (1) {
     ev = ble_npl_eventq_get(q, BLE_NPL_TIME_FOREVER);
-    s_mgos_handler_pending = true;
     while (!mgos_invoke_cb(esp32_bt_mgos_handler, ev, false /* from_isr */)) {
     }
     // Wait for the mgos task callback to run and process the event.
-    while (s_mgos_handler_pending) {
-      taskYIELD();
-    }
+    xSemaphoreTake(s_sem, portMAX_DELAY);
   }
 }
 
