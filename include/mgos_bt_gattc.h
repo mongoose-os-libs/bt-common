@@ -32,6 +32,7 @@ enum mgos_bt_gattc_event {
   MGOS_BT_GATTC_EV_CONNECT = MGOS_BT_GATTC_EV_BASE, /* mgos_bt_gatt_conn */
   MGOS_BT_GATTC_EV_DISCONNECT,                      /* mgos_bt_gatt_conn */
   MGOS_BT_GATTC_EV_DISCOVERY_RESULT, /* mgos_bt_gattc_discovery_result_arg */
+  MGOS_BT_GATTC_EV_DISCOVERY_DONE,   /* mgos_bt_gattc_discovery_done_arg */
   MGOS_BT_GATTC_EV_READ_RESULT,      /* mgos_bt_gattc_read_result */
   MGOS_BT_GATTC_EV_NOTIFY,           /* mgos_bt_gattc_notify_arg */
 };
@@ -44,6 +45,11 @@ struct mgos_bt_gattc_discovery_result_arg {
   struct mgos_bt_uuid chr;       /* Characteristic UUID */
   uint16_t handle;               /* Characteristic handle  */
   uint8_t prop;                  /* Characteristic properties */
+};
+
+struct mgos_bt_gattc_discovery_done_arg {
+  struct mgos_bt_gatt_conn conn; /* Device address */
+  bool ok;                       /* Disconvery completed successfuly or not. */
 };
 
 struct mgos_bt_gattc_read_result {
@@ -59,11 +65,11 @@ struct mgos_bt_gattc_notify_arg {
 };
 
 bool mgos_bt_gattc_connect(const struct mgos_bt_addr *addr);
-bool mgos_bt_gattc_discover(int conn_id);
-bool mgos_bt_gattc_disconnect(int conn_id);
-bool mgos_bt_gattc_read(int conn_id, uint16_t handle);
-bool mgos_bt_gattc_subscribe(int conn_id, uint16_t handle);
-bool mgos_bt_gattc_write(int conn_id, uint16_t handle, struct mg_str data,
+bool mgos_bt_gattc_discover(uint16_t conn_id);
+bool mgos_bt_gattc_disconnect(uint16_t conn_id);
+bool mgos_bt_gattc_read(uint16_t conn_id, uint16_t handle);
+bool mgos_bt_gattc_subscribe(uint16_t conn_id, uint16_t handle);
+bool mgos_bt_gattc_write(uint16_t conn_id, uint16_t handle, struct mg_str data,
                          bool resp_required);
 
 #ifdef __cplusplus

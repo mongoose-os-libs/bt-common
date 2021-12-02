@@ -340,6 +340,19 @@ static void esp32_bt_gatts_send_next_ind_locked(
   }
 }
 
+static int esp32_bt_gatts_mtu_event(uint16_t conn_id,
+                                    const struct ble_gatt_error *err,
+                                    uint16_t mtu, void *arg) {
+  struct esp32_bt_gatts_connection_entry *ce = arg;
+  LOG(LL_DEBUG, ("MTU_FN %d st %d mtu %d", conn_id, err->status, mtu));
+  // Peer may not support MTU exchange procedure.
+  if (err->status == 0) {
+    // ce->gc.mtu = mtu;
+  }
+  esp32_bt_gatts_create_sessions(ce);
+  return 0;
+}
+
 int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
   int ret = 0;
   char buf1[MGOS_BT_UUID_STR_LEN], buf2[MGOS_BT_UUID_STR_LEN];
@@ -351,9 +364,10 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
       uint16_t conn_id = ev->connect.conn_handle;
       struct ble_gap_conn_desc cd;
       ble_gap_conn_find(conn_id, &cd);
-      LOG(LL_INFO, ("CONNECT %s ch %d st %d",
-                    esp32_bt_addr_to_str(&cd.peer_ota_addr, buf1), conn_id,
-                    ev->connect.status));
+      LOG(LL_INFO,
+          ("CONNECT %s ch %d st %d AM %d M %d",
+           esp32_bt_addr_to_str(&cd.peer_ota_addr, buf1), conn_id,
+           ev->connect.status, ble_att_preferred_mtu(), ble_att_mtu(conn_id)));
       if (ev->connect.status != 0) break;
       struct esp32_bt_gatts_connection_entry *ce = calloc(1, sizeof(*ce));
       if (ce == NULL) {
@@ -367,8 +381,7 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
       SLIST_INIT(&ce->pending_nm);
       STAILQ_INIT(&ce->pending_inds);
       SLIST_INSERT_HEAD(&s_conns, ce, next);
-      esp32_bt_gatts_create_sessions(ce);
-      ble_gattc_exchange_mtu(conn_id, NULL, NULL);
+      ble_gattc_exchange_mtu(conn_id, esp32_bt_gatts_mtu_event, ce);
       break;
     }
     case BLE_GAP_EVENT_DISCONNECT: {
@@ -430,15 +443,8 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
       break;
     }
     case BLE_GAP_EVENT_MTU: {
-      struct esp32_bt_gatts_connection_entry *ce =
-          find_connection(ev->mtu.conn_handle);
-      if (ce == NULL) break;
-      uint16_t mtu = ev->mtu.value;
-      LOG(LL_DEBUG,
-          ("%s: MTU %d",
-           mgos_bt_addr_to_str(&ce->gc.addr, MGOS_BT_ADDR_STRINGIFY_TYPE, buf1),
-           mtu));
-      ce->gc.mtu = 1024;  // mtu;
+      // Note: this event is not delivered in case of MTU exchange error,
+      // and in case of success it duplicates esp32_bt_gatts_mtu_event.
       break;
     }
     case BLE_GAP_EVENT_SUBSCRIBE: {

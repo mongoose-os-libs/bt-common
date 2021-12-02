@@ -126,6 +126,19 @@ const struct mjs_c_struct_member *mgos_bt_gattc_js_get_discovery_result_arg_def(
   return gattc_discovery_result_arg_def;
 }
 
+static const struct mjs_c_struct_member gattc_discovery_done_arg_def[] = {
+    {"conn", offsetof(struct mgos_bt_gattc_discovery_done_arg, conn),
+     MJS_STRUCT_FIELD_TYPE_STRUCT, gatt_conn_def},
+    {"ok", offsetof(struct mgos_bt_gattc_discovery_done_arg, ok),
+     MJS_STRUCT_FIELD_TYPE_BOOL, NULL},
+    {NULL},
+};
+
+const struct mjs_c_struct_member *mgos_bt_gattc_js_get_discovery_done_arg_def(
+    void) {
+  return gattc_discovery_done_arg_def;
+}
+
 static const struct mjs_c_struct_member gattc_read_result_def[] = {
     {"conn", offsetof(struct mgos_bt_gattc_read_result, conn),
      MJS_STRUCT_FIELD_TYPE_STRUCT, gatt_conn_def},
