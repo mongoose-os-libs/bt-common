@@ -174,7 +174,9 @@ bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *opts) {
 }
 
 static int esp32_bt_gap_event(struct ble_gap_event *ev, void *arg) {
+  int ret = 0;
   LOG(LL_DEBUG, ("GAP Event %d", ev->type));
+  esp32_bt_rlock();
   switch (ev->type) {
     // Forward GATTS events to the GATTS handler.
     case BLE_GAP_EVENT_CONNECT:
@@ -187,7 +189,7 @@ static int esp32_bt_gap_event(struct ble_gap_event *ev, void *arg) {
     case BLE_GAP_EVENT_SUBSCRIBE:
     case BLE_GAP_EVENT_NOTIFY_TX:
     case BLE_GAP_EVENT_MTU:
-      esp32_bt_gatts_event(ev, arg);
+      ret = esp32_bt_gatts_event(ev, arg);
       break;
     case BLE_GAP_EVENT_ADV_COMPLETE:
       s_advertising = false;
@@ -206,10 +208,11 @@ static int esp32_bt_gap_event(struct ble_gap_event *ev, void *arg) {
       }
       // Return BLE_GAP_REPEAT_PAIRING_RETRY to indicate that the host should
       // continue with the pairing operation.
-      return BLE_GAP_REPEAT_PAIRING_RETRY;
+      ret = BLE_GAP_REPEAT_PAIRING_RETRY;
     }
   }
-  return 0;
+  esp32_bt_runlock();
+  return ret;
 }
 
 bool esp32_bt_gap_start_advertising(void) {
@@ -303,9 +306,13 @@ bool esp32_bt_gap_start_advertising(void) {
 }
 
 static bool esp32_bt_gap_stop_advertising(void) {
-  if (!s_advertising) return true;
-  bool res = (ble_gap_adv_stop() == 0);
+  esp32_bt_rlock();
+  bool res = !s_advertising;
+  if (res) goto out;
+  res = (ble_gap_adv_stop() == 0);
   if (res) s_advertising = false;
+out:
+  esp32_bt_runlock();
   return res;
 }
 
@@ -330,7 +337,10 @@ bool mgos_bt_gap_set_scan_rsp_data(struct mg_str scan_rsp_data) {
 }
 
 bool mgos_bt_gap_set_adv_enable(bool adv_enable) {
+  esp32_bt_rlock();
   s_adv_enable = adv_enable;
-  return (s_adv_enable ? esp32_bt_gap_start_advertising()
-                       : esp32_bt_gap_stop_advertising());
+  bool res = (s_adv_enable ? esp32_bt_gap_start_advertising()
+                           : esp32_bt_gap_stop_advertising());
+  esp32_bt_rlock();
+  return res;
 }

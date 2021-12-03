@@ -141,8 +141,12 @@ static void esp32_bt_gattc_finish_discovery(struct esp32_bt_gattc_conn *conn,
 
 static int esp32_bt_gattc_event(struct ble_gap_event *ev, void *arg) {
   char buf1[MGOS_BT_UUID_STR_LEN];
+  esp32_bt_rlock();
   struct esp32_bt_gattc_conn *conn = validate_conn(arg);
-  if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
+  if (conn == NULL) {
+    esp32_bt_runlock();
+    return BLE_ATT_ERR_UNLIKELY;
+  }
   LOG(LL_DEBUG, ("GATTC EV %d", ev->type));
   switch (ev->type) {
     case BLE_GAP_EVENT_CONNECT: {
@@ -150,9 +154,11 @@ static int esp32_bt_gattc_event(struct ble_gap_event *ev, void *arg) {
       conn->gc.conn_id = conn_id;
       struct ble_gap_conn_desc cd;
       ble_gap_conn_find(conn_id, &cd);
-      LOG(LL_INFO, ("CONNECT %s ch %d st %d",
+      int8_t conn_rssi = 0;
+      ble_gap_conn_rssi(conn_id, &conn_rssi);
+      LOG(LL_INFO, ("CONNECT %s ch %d st %d rssi %d",
                     esp32_bt_addr_to_str(&cd.peer_ota_addr, buf1), conn_id,
-                    ev->connect.status));
+                    ev->connect.status, -conn_rssi));
       ble_gattc_exchange_mtu(conn_id, esp32_bt_gattc_mtu_event, conn);
       break;
     }
@@ -179,6 +185,7 @@ static int esp32_bt_gattc_event(struct ble_gap_event *ev, void *arg) {
       break;
     }
   }
+  esp32_bt_runlock();
   return 0;
 }
 
@@ -262,8 +269,12 @@ static int esp32_bt_gattc_disc_dsc_ev(uint16_t conn_id,
                                       void *arg) {
   int ret = 0;
   char buf[MGOS_BT_UUID_STR_LEN];
+  esp32_bt_rlock();
   struct esp32_bt_gattc_conn *conn = validate_conn(arg);
-  if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
+  if (conn == NULL) {
+    esp32_bt_runlock();
+    return BLE_ATT_ERR_UNLIKELY;
+  }
   switch (err->status) {
     case 0:
       LOG(LL_DEBUG, ("DISC_DSC ch %d uuid %s h %d", conn_id,
@@ -282,6 +293,7 @@ static int esp32_bt_gattc_disc_dsc_ev(uint16_t conn_id,
       esp32_bt_gattc_finish_discovery(conn, false /* ok */);
     }
   }
+  esp32_bt_runlock();
   return ret;
 }
 
@@ -291,8 +303,12 @@ static int esp32_bt_gattc_disc_chr_ev(uint16_t conn_id,
                                       void *arg) {
   int ret = 0;
   char buf[MGOS_BT_UUID_STR_LEN];
+  esp32_bt_rlock();
   struct esp32_bt_gattc_conn *conn = validate_conn(arg);
-  if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
+  if (conn == NULL) {
+    esp32_bt_runlock();
+    return BLE_ATT_ERR_UNLIKELY;
+  }
   switch (err->status) {
     case 0:
       LOG(LL_DEBUG, ("DISC_CHR ch %d uuid %s dh %d vh %d", conn_id,
@@ -316,6 +332,7 @@ static int esp32_bt_gattc_disc_chr_ev(uint16_t conn_id,
       esp32_bt_gattc_finish_discovery(conn, false /* ok */);
     }
   }
+  esp32_bt_runlock();
   return ret;
 }
 
@@ -325,8 +342,12 @@ static int esp32_bt_gattc_disc_svc_ev(uint16_t conn_id,
                                       void *arg) {
   int ret = 0;
   char buf[MGOS_BT_UUID_STR_LEN];
+  esp32_bt_rlock();
   struct esp32_bt_gattc_conn *conn = validate_conn(arg);
-  if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
+  if (conn == NULL) {
+    esp32_bt_runlock();
+    return BLE_ATT_ERR_UNLIKELY;
+  }
   switch (err->status) {
     case 0:
       LOG(LL_DEBUG, ("DISC_SVC ch %d uuid %s sh %d eh %d", conn_id,
@@ -354,6 +375,7 @@ static int esp32_bt_gattc_disc_svc_ev(uint16_t conn_id,
       esp32_bt_gattc_finish_discovery(conn, false /* ok */);
     }
   }
+  esp32_bt_runlock();
   return ret;
 }
 
@@ -364,19 +386,27 @@ static void esp32_bt_gattc_invoke_fd(void *arg) {
 }
 
 bool mgos_bt_gattc_discover(uint16_t conn_id) {
+  int ret = false;
+  esp32_bt_rlock();
   struct esp32_bt_gattc_conn *conn = find_conn_by_id(conn_id);
-  if (conn == NULL) return false;
-  if (!conn->connected || conn->disc_in_progress) return false;
+  if (conn == NULL) goto out;
+  if (!conn->connected || conn->disc_in_progress) goto out;
   if (conn->disc_done) {
     conn->disc_in_progress = true;
     mgos_invoke_cb(esp32_bt_gattc_invoke_fd, conn, false /* from_isr */);
-    return true;
+    ret = true;
+    goto out;
   }
   conn->disc_in_progress = true;
   if (ble_gattc_disc_all_svcs(conn_id, esp32_bt_gattc_disc_svc_ev, conn) != 0) {
     conn->disc_in_progress = false;
+    ret = false;
+  } else {
+    ret = true;
   }
-  return true;
+out:
+  esp32_bt_runlock();
+  return ret;
 }
 
 bool mgos_bt_gattc_disconnect(uint16_t conn_id) {

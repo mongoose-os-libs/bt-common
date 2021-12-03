@@ -37,6 +37,9 @@ int esp32_bt_gatts_event(const struct ble_gap_event *event, void *arg);
 
 extern uint8_t own_addr_type;
 
+void esp32_bt_rlock(void);
+void esp32_bt_runlock(void);
+
 #ifdef __cplusplus
 }
 #endif

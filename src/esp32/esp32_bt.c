@@ -42,6 +42,7 @@ static bool s_inited = false;
 static bool s_should_be_running = false;
 static TaskHandle_t s_host_task_handle;
 static SemaphoreHandle_t s_sem = NULL;
+static struct mgos_rlock_type *s_lock = NULL;
 
 enum esp32_bt_state {
   ESP32_BT_STOPPED = 0,
@@ -239,12 +240,22 @@ static void esp32_bt_host_task(void *param) {
   }
 }
 
+void esp32_bt_rlock(void) {
+  mgos_rlock(s_lock);
+}
+
+void esp32_bt_runlock(void) {
+  mgos_runlock(s_lock);
+}
+
 extern void ble_store_config_init(void);
 
 static bool esp32_bt_init(void) {
   if (s_inited) {
     return true;
   }
+
+  s_lock = mgos_rlock_create();
 
   bool ret = false;
 
