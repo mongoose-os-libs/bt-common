@@ -47,8 +47,9 @@ struct esp32_bt_gattc_disc_result_entry {
 
 struct esp32_bt_gattc_conn {
   struct mgos_bt_gatt_conn gc;
-  bool connected;
-  bool disc_in_progress;
+  unsigned int connected : 1;
+  unsigned int disc_done : 1;
+  unsigned int disc_in_progress : 1;
   SLIST_HEAD(disc_results, esp32_bt_gattc_disc_result_entry) disc_results;
   SLIST_ENTRY(esp32_bt_gattc_conn) next;
 };
@@ -64,10 +65,19 @@ static struct esp32_bt_gattc_conn *find_conn_by_id(uint16_t conn_id) {
   return NULL;
 }
 
+static struct esp32_bt_gattc_conn *validate_conn(void *maybe_conn) {
+  struct esp32_bt_gattc_conn *conn;
+  SLIST_FOREACH(conn, &s_conns, next) {
+    if (conn == maybe_conn) return conn;
+  }
+  return NULL;
+}
+
 static int esp32_bt_gattc_mtu_event(uint16_t conn_id,
                                     const struct ble_gatt_error *err,
                                     uint16_t mtu, void *arg) {
-  struct esp32_bt_gattc_conn *conn = arg;
+  struct esp32_bt_gattc_conn *conn = validate_conn(arg);
+  if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
   LOG(LL_DEBUG, ("MTU_FN %d st %d mtu %d", conn_id, err->status, mtu));
   if (err->status == 0) {
     conn->gc.mtu = mtu;
@@ -84,7 +94,7 @@ static uint16_t esp32_bt_gattc_get_disc_entry_handle(
     case DISC_RESULT_SVC:
       return dre->svc.start_handle;
     case DISC_RESULT_CHR:
-      return dre->chr.def_handle;
+      return dre->chr.val_handle;
     case DISC_RESULT_DSC:
       return dre->dsc.handle;
   }
@@ -94,6 +104,7 @@ static uint16_t esp32_bt_gattc_get_disc_entry_handle(
 static void esp32_bt_gattc_finish_discovery(struct esp32_bt_gattc_conn *conn,
                                             bool ok) {
   if (!conn->disc_in_progress) return;
+  conn->disc_done = true;
   conn->disc_in_progress = false;
   if (ok) {
     struct esp32_bt_gattc_disc_result_entry *dre, *sdre = NULL;
@@ -114,15 +125,11 @@ static void esp32_bt_gattc_finish_discovery(struct esp32_bt_gattc_conn *conn,
           break;
         }
         case DISC_RESULT_DSC: {
-          // TODO
+          // TODO(rojer): Expose in callbacks.
           break;
         }
       }
     }
-  }
-  struct esp32_bt_gattc_disc_result_entry *dre, *dret;
-  SLIST_FOREACH_SAFE(dre, &conn->disc_results, next, dret) {
-    free(dre);
   }
   struct mgos_bt_gattc_discovery_done_arg arg = {
       .conn = conn->gc,
@@ -134,7 +141,8 @@ static void esp32_bt_gattc_finish_discovery(struct esp32_bt_gattc_conn *conn,
 
 static int esp32_bt_gattc_event(struct ble_gap_event *ev, void *arg) {
   char buf1[MGOS_BT_UUID_STR_LEN];
-  struct esp32_bt_gattc_conn *conn = arg;
+  struct esp32_bt_gattc_conn *conn = validate_conn(arg);
+  if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
   LOG(LL_DEBUG, ("GATTC EV %d", ev->type));
   switch (ev->type) {
     case BLE_GAP_EVENT_CONNECT: {
@@ -162,6 +170,10 @@ static int esp32_bt_gattc_event(struct ble_gap_event *ev, void *arg) {
         mgos_event_trigger_schedule(MGOS_BT_GATTC_EV_DISCONNECT, &conn->gc,
                                     sizeof(conn->gc));
         esp32_bt_gattc_finish_discovery(conn, false /* ok */);
+      }
+      struct esp32_bt_gattc_disc_result_entry *dre, *dret;
+      SLIST_FOREACH_SAFE(dre, &conn->disc_results, next, dret) {
+        free(dre);
       }
       free(conn);
       break;
@@ -215,10 +227,24 @@ static int esp32_bt_gattc_add_disc_result_entry(
   }
   *ndre = *cdre;
   // Find insertion point: keep the list ordered by handle.
-  uint16_t h = esp32_bt_gattc_get_disc_entry_handle(ndre);
+  uint16_t ndre_h = esp32_bt_gattc_get_disc_entry_handle(ndre);
   struct esp32_bt_gattc_disc_result_entry *dre = NULL, *last_dre = NULL;
   SLIST_FOREACH(dre, &conn->disc_results, next) {
-    if (esp32_bt_gattc_get_disc_entry_handle(dre) > h) break;
+    uint16_t dre_h = esp32_bt_gattc_get_disc_entry_handle(dre);
+    if (dre_h == ndre_h) {
+      // This happens when sweeping descriptors - char and svc handles are
+      // returned as well, just ignore them.
+      if (ndre->type == DISC_RESULT_DSC &&
+          (dre->type == DISC_RESULT_SVC || dre->type == DISC_RESULT_CHR)) {
+        free(ndre);
+        return 0;
+      } else {
+        esp32_bt_gattc_finish_discovery(conn, false /* ok */);
+        return BLE_ATT_ERR_UNLIKELY;
+      }
+    } else if (dre_h > ndre_h) {
+      break;
+    }
     last_dre = dre;
   }
   if (last_dre == NULL) {
@@ -229,13 +255,44 @@ static int esp32_bt_gattc_add_disc_result_entry(
   return 0;
 }
 
+static int esp32_bt_gattc_disc_dsc_ev(uint16_t conn_id,
+                                      const struct ble_gatt_error *err,
+                                      uint16_t chr_val_handle,
+                                      const struct ble_gatt_dsc *dsc,
+                                      void *arg) {
+  int ret = 0;
+  char buf[MGOS_BT_UUID_STR_LEN];
+  struct esp32_bt_gattc_conn *conn = validate_conn(arg);
+  if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
+  switch (err->status) {
+    case 0:
+      LOG(LL_DEBUG, ("DISC_DSC ch %d uuid %s h %d", conn_id,
+                     esp32_bt_uuid_to_str(&dsc->uuid.u, buf), dsc->handle));
+      struct esp32_bt_gattc_disc_result_entry dre = {
+          .type = DISC_RESULT_DSC,
+          .dsc = *dsc,
+      };
+      ret = esp32_bt_gattc_add_disc_result_entry(conn, &dre);
+      break;
+    case BLE_HS_EDONE: {
+      esp32_bt_gattc_finish_discovery(conn, true /* ok */);
+      break;
+    }
+    default: {
+      esp32_bt_gattc_finish_discovery(conn, false /* ok */);
+    }
+  }
+  return ret;
+}
+
 static int esp32_bt_gattc_disc_chr_ev(uint16_t conn_id,
                                       const struct ble_gatt_error *err,
                                       const struct ble_gatt_chr *chr,
                                       void *arg) {
   int ret = 0;
   char buf[MGOS_BT_UUID_STR_LEN];
-  struct esp32_bt_gattc_conn *conn = arg;
+  struct esp32_bt_gattc_conn *conn = validate_conn(arg);
+  if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
   switch (err->status) {
     case 0:
       LOG(LL_DEBUG, ("DISC_CHR ch %d uuid %s dh %d vh %d", conn_id,
@@ -248,9 +305,11 @@ static int esp32_bt_gattc_disc_chr_ev(uint16_t conn_id,
       ret = esp32_bt_gattc_add_disc_result_entry(conn, &dre);
       break;
     case BLE_HS_EDONE: {
-      // TODO: Discover descriptors?
-
-      esp32_bt_gattc_finish_discovery(conn, true /* ok */);
+      uint16_t sh = SLIST_FIRST(&conn->disc_results)->svc.start_handle;
+      if (ble_gattc_disc_all_dscs(conn_id, sh, 0xffff,
+                                  esp32_bt_gattc_disc_dsc_ev, conn) != 0) {
+        esp32_bt_gattc_finish_discovery(conn, false /* ok */);
+      }
       break;
     }
     default: {
@@ -266,7 +325,8 @@ static int esp32_bt_gattc_disc_svc_ev(uint16_t conn_id,
                                       void *arg) {
   int ret = 0;
   char buf[MGOS_BT_UUID_STR_LEN];
-  struct esp32_bt_gattc_conn *conn = arg;
+  struct esp32_bt_gattc_conn *conn = validate_conn(arg);
+  if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
   switch (err->status) {
     case 0:
       LOG(LL_DEBUG, ("DISC_SVC ch %d uuid %s sh %d eh %d", conn_id,
@@ -297,10 +357,21 @@ static int esp32_bt_gattc_disc_svc_ev(uint16_t conn_id,
   return ret;
 }
 
+static void esp32_bt_gattc_invoke_fd(void *arg) {
+  struct esp32_bt_gattc_conn *conn = validate_conn(arg);
+  if (conn == NULL || !conn->disc_done) return;
+  esp32_bt_gattc_finish_discovery(conn, true /* ok */);
+}
+
 bool mgos_bt_gattc_discover(uint16_t conn_id) {
   struct esp32_bt_gattc_conn *conn = find_conn_by_id(conn_id);
   if (conn == NULL) return false;
   if (!conn->connected || conn->disc_in_progress) return false;
+  if (conn->disc_done) {
+    conn->disc_in_progress = true;
+    mgos_invoke_cb(esp32_bt_gattc_invoke_fd, conn, false /* from_isr */);
+    return true;
+  }
   conn->disc_in_progress = true;
   if (ble_gattc_disc_all_svcs(conn_id, esp32_bt_gattc_disc_svc_ev, conn) != 0) {
     conn->disc_in_progress = false;
