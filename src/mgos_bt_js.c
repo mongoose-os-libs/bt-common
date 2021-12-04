@@ -140,11 +140,13 @@ const struct mjs_c_struct_member *mgos_bt_gattc_js_get_discovery_done_arg_def(
 }
 
 static const struct mjs_c_struct_member gattc_read_result_def[] = {
-    {"conn", offsetof(struct mgos_bt_gattc_read_result, conn),
+    {"conn", offsetof(struct mgos_bt_gattc_read_result_arg, conn),
      MJS_STRUCT_FIELD_TYPE_STRUCT, gatt_conn_def},
-    {"handle", offsetof(struct mgos_bt_gattc_read_result, handle),
+    {"handle", offsetof(struct mgos_bt_gattc_read_result_arg, handle),
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
-    {"data", offsetof(struct mgos_bt_gattc_read_result, data),
+    {"ok", offsetof(struct mgos_bt_gattc_read_result_arg, ok),
+     MJS_STRUCT_FIELD_TYPE_BOOL, NULL},
+    {"data", offsetof(struct mgos_bt_gattc_read_result_arg, data),
      MJS_STRUCT_FIELD_TYPE_MG_STR, NULL},
     {NULL},
 };

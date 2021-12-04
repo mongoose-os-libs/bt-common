@@ -359,6 +359,22 @@ static void esp32_bt_start(void *arg) {
   (void) arg;
 }
 
+char *esp32_bt_mbuf_to_flat(const struct os_mbuf *om, uint16_t *len) {
+  *len = 0;
+  if (om == NULL) return NULL;
+  char *data = NULL;
+  uint16_t data_len = OS_MBUF_PKTLEN(om);
+  if (data_len > 0) {
+    data = malloc(data_len);
+    if (data == NULL) {
+      return NULL;
+    }
+    ble_hs_mbuf_to_flat(om, data, data_len, &data_len);
+  }
+  *len = data_len;
+  return data;
+}
+
 bool mgos_bt_common_init(void) {
   if (!mgos_sys_config_get_bt_enable()) {
     LOG(LL_INFO, ("Bluetooth is disabled"));

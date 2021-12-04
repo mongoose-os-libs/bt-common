@@ -29,29 +29,41 @@
 #include "esp32_bt.h"
 #include "esp32_bt_internal.h"
 
-enum esp32_bt_gattc_disc_result_entry_type {
-  DISC_RESULT_SVC,
-  DISC_RESULT_CHR,
-  DISC_RESULT_DSC,
-};
-
-struct esp32_bt_gattc_disc_result_entry {
-  enum esp32_bt_gattc_disc_result_entry_type type;
-  union {
-    struct ble_gatt_svc svc;
-    struct ble_gatt_chr chr;
-    struct ble_gatt_dsc dsc;
-  };
-  SLIST_ENTRY(esp32_bt_gattc_disc_result_entry) next;
-};
+struct esp32_bt_gattc_disc_result;
+struct esp32_bt_gattc_pending_read;
 
 struct esp32_bt_gattc_conn {
   struct mgos_bt_gatt_conn gc;
   unsigned int connected : 1;
   unsigned int disc_done : 1;
   unsigned int disc_in_progress : 1;
-  SLIST_HEAD(disc_results, esp32_bt_gattc_disc_result_entry) disc_results;
+  uint16_t last_read_handle;
+  SLIST_HEAD(disc_results, esp32_bt_gattc_disc_result) disc_results;
+  SLIST_HEAD(panding_reads, esp32_bt_gattc_pending_read) pending_reads;
   SLIST_ENTRY(esp32_bt_gattc_conn) next;
+};
+
+enum esp32_bt_gattc_disc_result_type {
+  DISC_RESULT_SVC,
+  DISC_RESULT_CHR,
+  DISC_RESULT_DSC,
+};
+
+struct esp32_bt_gattc_disc_result {
+  enum esp32_bt_gattc_disc_result_type type;
+  union {
+    struct ble_gatt_svc svc;
+    struct ble_gatt_chr chr;
+    struct ble_gatt_dsc dsc;
+  };
+  SLIST_ENTRY(esp32_bt_gattc_disc_result) next;
+};
+
+struct esp32_bt_gattc_pending_read {
+  struct esp32_bt_gattc_conn *conn;
+  struct mbuf data;
+  uint16_t handle;
+  SLIST_ENTRY(esp32_bt_gattc_pending_read) next;
 };
 
 static SLIST_HEAD(s_conns, esp32_bt_gattc_conn) s_conns =
@@ -73,6 +85,12 @@ static struct esp32_bt_gattc_conn *validate_conn(void *maybe_conn) {
   return NULL;
 }
 
+static void esp32_bt_gattc_pending_read_free(
+    struct esp32_bt_gattc_pending_read *pr) {
+  mbuf_free(&pr->data);
+  free(pr);
+}
+
 static int esp32_bt_gattc_mtu_event(uint16_t conn_id,
                                     const struct ble_gatt_error *err,
                                     uint16_t mtu, void *arg) {
@@ -89,7 +107,7 @@ static int esp32_bt_gattc_mtu_event(uint16_t conn_id,
 }
 
 static uint16_t esp32_bt_gattc_get_disc_entry_handle(
-    const struct esp32_bt_gattc_disc_result_entry *dre) {
+    const struct esp32_bt_gattc_disc_result *dre) {
   switch (dre->type) {
     case DISC_RESULT_SVC:
       return dre->svc.start_handle;
@@ -107,7 +125,7 @@ static void esp32_bt_gattc_finish_discovery(struct esp32_bt_gattc_conn *conn,
   conn->disc_done = true;
   conn->disc_in_progress = false;
   if (ok) {
-    struct esp32_bt_gattc_disc_result_entry *dre, *sdre = NULL;
+    struct esp32_bt_gattc_disc_result *dre, *sdre = NULL;
     SLIST_FOREACH(dre, &conn->disc_results, next) {
       switch (dre->type) {
         case DISC_RESULT_SVC: {
@@ -177,10 +195,11 @@ static int esp32_bt_gattc_event(struct ble_gap_event *ev, void *arg) {
                                     sizeof(conn->gc));
         esp32_bt_gattc_finish_discovery(conn, false /* ok */);
       }
-      struct esp32_bt_gattc_disc_result_entry *dre, *dret;
+      struct esp32_bt_gattc_disc_result *dre, *dret;
       SLIST_FOREACH_SAFE(dre, &conn->disc_results, next, dret) {
         free(dre);
       }
+      // Pending reads should've been freed already by disconnection.
       free(conn);
       break;
     }
@@ -197,6 +216,7 @@ bool mgos_bt_gattc_connect(const struct mgos_bt_addr *addr) {
   conn->gc.addr = *addr;
   conn->gc.conn_id = 0xffff;
   SLIST_INIT(&conn->disc_results);
+  SLIST_INIT(&conn->pending_reads);
   int rc = ble_gap_connect(own_addr_type, &addr2, 1000 /* duration_ms */,
                            NULL /* params */, esp32_bt_gattc_event, conn);
   if (rc != 0) {
@@ -207,8 +227,64 @@ bool mgos_bt_gattc_connect(const struct mgos_bt_addr *addr) {
   return true;
 }
 
+static int esp32_bt_gattc_read_cb(uint16_t conn_id,
+                                  const struct ble_gatt_error *err,
+                                  struct ble_gatt_attr *attr, void *arg) {
+  struct esp32_bt_gattc_pending_read *pr = arg;
+  struct esp32_bt_gattc_conn *conn = validate_conn(pr->conn);
+  if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
+  if (err->status == 0) {
+    uint16_t data_len = 0;
+    char *data = esp32_bt_mbuf_to_flat(attr->om, &data_len);
+    LOG(LL_DEBUG,
+        ("READ_PART c %d ah %d len %d", conn_id, pr->handle, data_len));
+    mbuf_append(&pr->data, data, data_len);
+    free(data);
+    return 0;
+  }
+  SLIST_REMOVE(&conn->pending_reads, pr, esp32_bt_gattc_pending_read, next);
+  LOG(LL_DEBUG, ("READ_DONE c %d ah %d st %d len %d", conn_id, pr->handle,
+                 err->status, (int) pr->data.len));
+  struct mgos_bt_gattc_read_result_arg rarg = {
+      .conn = conn->gc,
+      .handle = pr->handle,
+      .ok = (err->status == BLE_HS_EDONE),
+      .data = mg_mk_str_n(pr->data.buf, pr->data.len),
+  };
+  mgos_event_trigger(MGOS_BT_GATTC_EV_READ_RESULT, &rarg);
+  esp32_bt_gattc_pending_read_free(pr);
+  return 0;
+}
+
 bool mgos_bt_gattc_read(uint16_t conn_id, uint16_t handle) {
-  return false;
+  LOG(LL_DEBUG, ("READ c %d ah %d", conn_id, handle));
+  bool res = false;
+  esp32_bt_rlock();
+  struct esp32_bt_gattc_conn *conn = find_conn_by_id(conn_id);
+  if (conn == NULL) goto out;
+  struct esp32_bt_gattc_pending_read *pr = NULL;
+  SLIST_FOREACH(pr, &conn->pending_reads, next) {
+    if (pr->handle == handle) {
+      // There's already a pending read for this attr, just wait.
+      res = true;
+      goto out;
+    }
+  }
+  pr = calloc(1, sizeof(*pr));
+  if (pr == NULL) goto out;
+  pr->conn = conn;
+  pr->handle = handle;
+  mbuf_init(&pr->data, 0);
+  if (ble_gattc_read_long(conn_id, handle, 0, esp32_bt_gattc_read_cb, pr) ==
+      0) {
+    SLIST_INSERT_HEAD(&conn->pending_reads, pr, next);
+    res = true;
+  } else {
+    esp32_bt_gattc_pending_read_free(pr);
+  }
+out:
+  esp32_bt_runlock();
+  return res;
 }
 
 bool mgos_bt_gattc_subscribe(uint16_t conn_id, uint16_t handle) {
@@ -226,8 +302,8 @@ bool mgos_bt_gattc_write(uint16_t conn_id, uint16_t handle, struct mg_str data,
 
 static int esp32_bt_gattc_add_disc_result_entry(
     struct esp32_bt_gattc_conn *conn,
-    const struct esp32_bt_gattc_disc_result_entry *cdre) {
-  struct esp32_bt_gattc_disc_result_entry *ndre = calloc(1, sizeof(*cdre));
+    const struct esp32_bt_gattc_disc_result *cdre) {
+  struct esp32_bt_gattc_disc_result *ndre = calloc(1, sizeof(*ndre));
   if (ndre == NULL) {
     esp32_bt_gattc_finish_discovery(conn, false /* ok */);
     return BLE_ATT_ERR_INSUFFICIENT_RES;
@@ -235,7 +311,7 @@ static int esp32_bt_gattc_add_disc_result_entry(
   *ndre = *cdre;
   // Find insertion point: keep the list ordered by handle.
   uint16_t ndre_h = esp32_bt_gattc_get_disc_entry_handle(ndre);
-  struct esp32_bt_gattc_disc_result_entry *dre = NULL, *last_dre = NULL;
+  struct esp32_bt_gattc_disc_result *dre = NULL, *last_dre = NULL;
   SLIST_FOREACH(dre, &conn->disc_results, next) {
     uint16_t dre_h = esp32_bt_gattc_get_disc_entry_handle(dre);
     if (dre_h == ndre_h) {
@@ -279,7 +355,7 @@ static int esp32_bt_gattc_disc_dsc_ev(uint16_t conn_id,
     case 0:
       LOG(LL_DEBUG, ("DISC_DSC ch %d uuid %s h %d", conn_id,
                      esp32_bt_uuid_to_str(&dsc->uuid.u, buf), dsc->handle));
-      struct esp32_bt_gattc_disc_result_entry dre = {
+      struct esp32_bt_gattc_disc_result dre = {
           .type = DISC_RESULT_DSC,
           .dsc = *dsc,
       };
@@ -314,7 +390,7 @@ static int esp32_bt_gattc_disc_chr_ev(uint16_t conn_id,
       LOG(LL_DEBUG, ("DISC_CHR ch %d uuid %s dh %d vh %d", conn_id,
                      esp32_bt_uuid_to_str(&chr->uuid.u, buf), chr->def_handle,
                      chr->val_handle));
-      struct esp32_bt_gattc_disc_result_entry dre = {
+      struct esp32_bt_gattc_disc_result dre = {
           .type = DISC_RESULT_CHR,
           .chr = *chr,
       };
@@ -353,7 +429,7 @@ static int esp32_bt_gattc_disc_svc_ev(uint16_t conn_id,
       LOG(LL_DEBUG, ("DISC_SVC ch %d uuid %s sh %d eh %d", conn_id,
                      esp32_bt_uuid_to_str(&svc->uuid.u, buf), svc->start_handle,
                      svc->end_handle));
-      struct esp32_bt_gattc_disc_result_entry dre = {
+      struct esp32_bt_gattc_disc_result dre = {
           .type = DISC_RESULT_SVC,
           .svc = *svc,
       };

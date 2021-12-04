@@ -40,6 +40,9 @@ extern uint8_t own_addr_type;
 void esp32_bt_rlock(void);
 void esp32_bt_runlock(void);
 
+struct os_mbuf;
+char *esp32_bt_mbuf_to_flat(const struct os_mbuf *om, uint16_t *len);
+
 #ifdef __cplusplus
 }
 #endif

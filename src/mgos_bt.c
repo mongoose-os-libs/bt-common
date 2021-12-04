@@ -171,7 +171,7 @@ struct mgos_event_info {
 
 static void free_evt(struct mgos_event_info *ei, void *ev_data) {
   if (ei->ev == MGOS_BT_GATTC_EV_READ_RESULT) {
-    struct mgos_bt_gattc_read_result *p = ev_data;
+    struct mgos_bt_gattc_read_result_arg *p = ev_data;
     mg_strfree(&p->data);
   } else if (ei->ev == MGOS_BT_GATTC_EV_NOTIFY) {
     struct mgos_bt_gattc_notify_arg *p = ev_data;
