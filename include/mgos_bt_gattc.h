@@ -34,6 +34,7 @@ enum mgos_bt_gattc_event {
   MGOS_BT_GATTC_EV_DISCOVERY_RESULT, /* mgos_bt_gattc_discovery_result_arg */
   MGOS_BT_GATTC_EV_DISCOVERY_DONE,   /* mgos_bt_gattc_discovery_done_arg */
   MGOS_BT_GATTC_EV_READ_RESULT,      /* mgos_bt_gattc_read_result_arg */
+  MGOS_BT_GATTC_EV_WRITE_RESULT,     /* mgos_bt_gattc_write_result_arg */
   MGOS_BT_GATTC_EV_NOTIFY,           /* mgos_bt_gattc_notify_arg */
 };
 
@@ -57,6 +58,12 @@ struct mgos_bt_gattc_read_result_arg {
   uint16_t handle;               /* Characteristic handle  */
   bool ok;                       /* Success indicator. */
   struct mg_str data;            /* Data that has been read */
+};
+
+struct mgos_bt_gattc_write_result_arg {
+  struct mgos_bt_gatt_conn conn; /* Device address */
+  uint16_t handle;               /* Characteristic handle  */
+  bool ok;                       /* Success indicator. */
 };
 
 struct mgos_bt_gattc_notify_arg {

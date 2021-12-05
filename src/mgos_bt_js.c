@@ -103,8 +103,8 @@ bool mgos_bt_gattc_connect_js(const char *addr_s) {
 }
 
 bool mgos_bt_gattc_write_js(int conn_id, uint16_t handle,
-                            const struct mg_str *data) {
-  return mgos_bt_gattc_write(conn_id, handle, *data, true /* resp_required */);
+                            const struct mg_str *data, bool resp_required) {
+  return mgos_bt_gattc_write(conn_id, handle, *data, resp_required);
 }
 
 static const struct mjs_c_struct_member gattc_discovery_result_arg_def[] = {
@@ -153,6 +153,20 @@ static const struct mjs_c_struct_member gattc_read_result_def[] = {
 
 const struct mjs_c_struct_member *mgos_bt_gattc_js_get_read_result_def(void) {
   return gattc_read_result_def;
+}
+
+static const struct mjs_c_struct_member gattc_write_result_def[] = {
+    {"conn", offsetof(struct mgos_bt_gattc_write_result_arg, conn),
+     MJS_STRUCT_FIELD_TYPE_STRUCT, gatt_conn_def},
+    {"handle", offsetof(struct mgos_bt_gattc_write_result_arg, handle),
+     MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
+    {"ok", offsetof(struct mgos_bt_gattc_write_result_arg, ok),
+     MJS_STRUCT_FIELD_TYPE_BOOL, NULL},
+    {NULL},
+};
+
+const struct mjs_c_struct_member *mgos_bt_gattc_js_get_write_result_def(void) {
+  return gattc_write_result_def;
 }
 
 const struct mjs_c_struct_member *mgos_bt_gattc_js_get_notify_arg_def(void) {
