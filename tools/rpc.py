@@ -97,15 +97,19 @@ class Device(btle.Peripheral):
         self._tx_ctl_char.write(struct.pack(">I", reqLen), withResponse=True)
         logging.debug(f"Sending request...")
         self._data_char.write(reqJSON.encode("ascii"), withResponse=True)
-        prev_frame_len = 0
         while True:
-            frame_len = struct.unpack(">I", self._rx_ctl_char.read())
+            frame_len = struct.unpack(">I", self._rx_ctl_char.read())[0]
             logging.debug(f"RX frame len: {frame_len}")
             if frame_len == 0:
                 time.sleep(0.1)
                 continue
-            frame = json.loads(self._data_char.read())
-            logging.debug(f"RX Frame data: {frame}")
+            frame_data, n_chunks = b"", 0
+            while len(frame_data) < frame_len:
+                chunk = self._data_char.read()
+                frame_data += chunk
+                n_chunks += 1
+            logging.debug(f"RX Frame data (rec'd in {n_chunks} chunks): {frame_data}")
+            frame = json.loads(frame_data)
             if frame.get("id", 0) != req["id"]:
                 continue
             if "result" in frame:

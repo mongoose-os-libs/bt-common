@@ -196,10 +196,6 @@ static const struct mjs_c_struct_member gatts_read_arg_def[] = {
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
     {"handle", offsetof(struct mgos_bt_gatts_read_arg, handle),
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
-    {"transId", offsetof(struct mgos_bt_gatts_read_arg, trans_id),
-     MJS_STRUCT_FIELD_TYPE_INT, NULL},
-    {"offset", offsetof(struct mgos_bt_gatts_read_arg, offset),
-     MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
     {NULL},
 };
 
@@ -215,10 +211,6 @@ static const struct mjs_c_struct_member gatts_write_arg_def[] = {
     {"desc_uuid", offsetof(struct mgos_bt_gatts_write_arg, desc_uuid),
      MJS_STRUCT_FIELD_TYPE_CUSTOM, bt_uuid_to_str},
     {"handle", offsetof(struct mgos_bt_gatts_write_arg, handle),
-     MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
-    {"transId", offsetof(struct mgos_bt_gatts_write_arg, trans_id),
-     MJS_STRUCT_FIELD_TYPE_INT, NULL},
-    {"offset", offsetof(struct mgos_bt_gatts_write_arg, offset),
      MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
     {"data", offsetof(struct mgos_bt_gatts_write_arg, data),
      MJS_STRUCT_FIELD_TYPE_MG_STR, NULL},

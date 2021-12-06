@@ -24,7 +24,6 @@ static enum mgos_bt_gatt_status mgos_bt_gatts_read_n(
     return MGOS_BT_GATT_STATUS_REQUEST_NOT_SUPPORTED;
   }
   struct mgos_bt_gatts_read_arg *arg = ev_arg;
-  if (arg->offset != 0) return MGOS_BT_GATT_STATUS_INVALID_OFFSET;
   mgos_bt_gatts_send_resp_data(c, arg, mg_mk_str_n((void *) &handler_arg, n));
   (void) c;
   (void) ev_arg;

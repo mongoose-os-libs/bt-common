@@ -344,9 +344,9 @@ static int esp32_bt_gatts_mtu_event(uint16_t conn_id,
                                     uint16_t mtu, void *arg) {
   struct esp32_bt_gatts_connection_entry *ce = arg;
   LOG(LL_DEBUG, ("MTU_FN %d st %d mtu %d", conn_id, err->status, mtu));
-  // Peer may not support MTU exchange procedure.
+  // Peer may not support MTU exchange procedure, proceed anyway.
   if (err->status == 0) {
-    // ce->gc.mtu = mtu;
+    ce->gc.mtu = mtu;
   }
   esp32_bt_gatts_create_sessions(ce);
   return 0;
@@ -374,8 +374,7 @@ int esp32_bt_gatts_event(const struct ble_gap_event *ev, void *arg) {
         break;
       }
       ce->gc.conn_id = conn_id;
-      // ce->gc.mtu = ble_att_mtu(conn_id);
-      ce->gc.mtu = 1024;  // mtu;
+      ce->gc.mtu = ble_att_mtu(conn_id);
       esp32_bt_addr_to_mgos(&cd.peer_ota_addr, &ce->gc.addr);
       SLIST_INIT(&ce->pending_nm);
       STAILQ_INIT(&ce->pending_inds);
@@ -608,8 +607,6 @@ static int esp32_gatts_attr_access_cb(uint16_t ch, uint16_t ah,
       struct mgos_bt_gatts_read_arg rarg = {
           .svc_uuid = sse->se->uuid,
           .handle = ah,
-          .trans_id = 0,
-          .offset = 0,
       };
       struct esp32_bt_service_attr_info *cai = arg;
       if (ctxt->op == BLE_GATT_ACCESS_OP_READ_CHR) {
@@ -648,9 +645,6 @@ static int esp32_gatts_attr_access_cb(uint16_t ch, uint16_t ah,
           .svc_uuid = sse->se->uuid,
           .handle = ah,
           .data = data,
-          .trans_id = 0,
-          .offset = 0,
-          .need_rsp = true,
       };
       struct esp32_bt_service_attr_info *cai = arg;
       if (ctxt->op == BLE_GATT_ACCESS_OP_WRITE_CHR) {
@@ -911,7 +905,6 @@ void mgos_bt_gatts_notify_uuid(struct mgos_bt_gatts_conn *gsc,
 }
 
 bool esp32_bt_gatts_start(void) {
-  LOG(LL_INFO, ("GATTS start, synced? %d", ble_hs_synced()));
   return esp32_bt_register_services();
 }
 
