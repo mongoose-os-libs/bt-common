@@ -359,20 +359,19 @@ static void esp32_bt_start(void *arg) {
   (void) arg;
 }
 
-char *esp32_bt_mbuf_to_flat(const struct os_mbuf *om, uint16_t *len) {
-  *len = 0;
-  if (om == NULL) return NULL;
+struct mg_str esp32_bt_mbuf_to_flat(const struct os_mbuf *om) {
+  struct mg_str res = MG_NULL_STR;
+  if (om == NULL) return res;
   char *data = NULL;
   uint16_t data_len = OS_MBUF_PKTLEN(om);
   if (data_len > 0) {
     data = malloc(data_len);
-    if (data == NULL) {
-      return NULL;
-    }
+    if (data == NULL) return res;
     ble_hs_mbuf_to_flat(om, data, data_len, &data_len);
   }
-  *len = data_len;
-  return data;
+  res.p = data;
+  res.len = data_len;
+  return res;
 }
 
 bool mgos_bt_common_init(void) {

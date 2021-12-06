@@ -203,6 +203,21 @@ static int esp32_bt_gattc_event(struct ble_gap_event *ev, void *arg) {
       free(conn);
       break;
     }
+    case BLE_GAP_EVENT_NOTIFY_RX: {
+      struct esp32_bt_gattc_conn *conn =
+          find_conn_by_id(ev->notify_rx.conn_handle);
+      if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
+      struct mg_str data = esp32_bt_mbuf_to_flat(ev->notify_rx.om);
+      struct mgos_bt_gattc_notify_arg narg = {
+          .conn = conn->gc,
+          .handle = ev->notify_rx.attr_handle,
+          .is_indication = ev->notify_rx.indication,
+          .data = data,
+      };
+      mgos_event_trigger(MGOS_BT_GATTC_EV_NOTIFY, &narg);
+      mg_strfree(&data);
+      break;
+    }
   }
   esp32_bt_runlock();
   return 0;
@@ -234,12 +249,11 @@ static int esp32_bt_gattc_read_cb(uint16_t conn_id,
   struct esp32_bt_gattc_conn *conn = validate_conn(pr->conn);
   if (conn == NULL) return BLE_ATT_ERR_UNLIKELY;
   if (err->status == 0) {
-    uint16_t data_len = 0;
-    char *data = esp32_bt_mbuf_to_flat(attr->om, &data_len);
+    struct mg_str data = esp32_bt_mbuf_to_flat(attr->om);
     LOG(LL_DEBUG,
-        ("READ_PART c %d ah %d len %d", conn_id, pr->handle, data_len));
-    mbuf_append(&pr->data, data, data_len);
-    free(data);
+        ("READ_PART c %d ah %d len %d", conn_id, pr->handle, data.len));
+    mbuf_append(&pr->data, data.p, data.len);
+    mg_strfree(&data);
     return 0;
   }
   SLIST_REMOVE(&conn->pending_reads, pr, esp32_bt_gattc_pending_read, next);
@@ -289,12 +303,6 @@ out:
   return res;
 }
 
-bool mgos_bt_gattc_subscribe(uint16_t conn_id, uint16_t handle) {
-  struct esp32_bt_gattc_conn *conn = find_conn_by_id(conn_id);
-  if (conn == NULL) return false;
-  return false;
-}
-
 static int esp32_bt_gattc_write_cb(uint16_t conn_id,
                                    const struct ble_gatt_error *err,
                                    struct ble_gatt_attr *attr, void *arg) {
@@ -334,6 +342,19 @@ bool mgos_bt_gattc_write(uint16_t conn_id, uint16_t handle, struct mg_str data,
     ret = ble_gattc_write_long(conn_id, handle, 0, om, esp32_bt_gattc_write_cb,
                                (void *) resp_required);
   }
+  if (ret != 0) {
+    LOG(LL_ERROR, ("ret = %d", ret));
+  }
+  return (ret == 0);
+}
+
+bool mgos_bt_gattc_set_notify_mode_cccd(uint16_t conn_id, uint16_t cccd_handle,
+                                        enum mgos_bt_gatt_notify_mode mode) {
+  struct esp32_bt_gattc_conn *conn = find_conn_by_id(conn_id);
+  if (conn == NULL) return false;
+  uint8_t data[2] = {mode, 0};
+  int ret =
+      ble_gattc_write_no_rsp_flat(conn_id, cccd_handle, data, sizeof(data));
   if (ret != 0) {
     LOG(LL_ERROR, ("ret = %d", ret));
   }

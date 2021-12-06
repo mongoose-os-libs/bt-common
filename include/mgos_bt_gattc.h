@@ -69,16 +69,26 @@ struct mgos_bt_gattc_write_result_arg {
 struct mgos_bt_gattc_notify_arg {
   struct mgos_bt_gatt_conn conn; /* Device address */
   uint16_t handle;               /* Characteristic handle  */
+  bool is_indication;            /* True if this is an indication. */
   struct mg_str data;            /* Notification data sent by the server */
 };
 
 bool mgos_bt_gattc_connect(const struct mgos_bt_addr *addr);
+
 bool mgos_bt_gattc_discover(uint16_t conn_id);
+
 bool mgos_bt_gattc_disconnect(uint16_t conn_id);
+
 bool mgos_bt_gattc_read(uint16_t conn_id, uint16_t handle);
-bool mgos_bt_gattc_subscribe(uint16_t conn_id, uint16_t handle);
+
 bool mgos_bt_gattc_write(uint16_t conn_id, uint16_t handle, struct mg_str data,
                          bool resp_required);
+
+// Note that the handle here is the handle of the CCCD for the attribute,
+// not the attribute itself. Usually CCCD immediately follows the attribute
+// so att_handle + 1 is a reasonable guess here.
+bool mgos_bt_gattc_set_notify_mode_cccd(uint16_t conn_id, uint16_t cccd_handle,
+                                        enum mgos_bt_gatt_notify_mode mode);
 
 #ifdef __cplusplus
 }

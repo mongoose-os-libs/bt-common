@@ -18,15 +18,14 @@ let GATTC = {
   },
   getWriteResult: function(evdata) { return s2o(evdata, GATTC._wrd); },
 
-  // NB: does not work at present, TODO
-  subscribe: ffi('bool mgos_bt_gattc_subscribe(int, int)'),
+  setNotifyModeCCCD: ffi('bool mgos_bt_gattc_set_notify_mode_cccd(int, int, int)'),
   getNotifyArg: function(evdata) { return s2o(evdata, GATTC._nad); },
 
   disconnect: ffi('bool mgos_bt_gattc_disconnect(int)'),
 
   _cd: ffi('void *mgos_bt_gatt_js_get_conn_def(void)')(),
-  _rrd: ffi('void *mgos_bt_gattc_js_get_read_result_def(void)')(),
-  _wrd: ffi('void *mgos_bt_gattc_js_get_write_result_def(void)')(),
+  _rrd: ffi('void *mgos_bt_gattc_js_get_read_result_arg_def(void)')(),
+  _wrd: ffi('void *mgos_bt_gattc_js_get_write_result_arg_def(void)')(),
   _nad: ffi('void *mgos_bt_gattc_js_get_notify_arg_def(void)')(),
   _drad: ffi('void *mgos_bt_gattc_js_get_discovery_result_arg_def(void)')(),
   _ddad: ffi('void *mgos_bt_gattc_js_get_discovery_done_arg_def(void)')(),
@@ -40,3 +39,7 @@ GATTC.EV_DISCOVERY_DONE = GATTC.EV_GRP + 3;
 GATTC.EV_READ_RESULT = GATTC.EV_GRP + 4;
 GATTC.EV_WRITE_RESULT = GATTC.EV_GRP + 5;
 GATTC.EV_NOTIFY = GATTC.EV_GRP + 6;
+
+GATTC.NOTIFY_MODE_OFF = 0;
+GATTC.NOTIFY_MODE_NOTIFY = 1;
+GATTC.NOTIFY_MODE_INDICATE = 2;

@@ -139,7 +139,7 @@ const struct mjs_c_struct_member *mgos_bt_gattc_js_get_discovery_done_arg_def(
   return gattc_discovery_done_arg_def;
 }
 
-static const struct mjs_c_struct_member gattc_read_result_def[] = {
+static const struct mjs_c_struct_member gattc_read_result_arg_def[] = {
     {"conn", offsetof(struct mgos_bt_gattc_read_result_arg, conn),
      MJS_STRUCT_FIELD_TYPE_STRUCT, gatt_conn_def},
     {"handle", offsetof(struct mgos_bt_gattc_read_result_arg, handle),
@@ -151,11 +151,12 @@ static const struct mjs_c_struct_member gattc_read_result_def[] = {
     {NULL},
 };
 
-const struct mjs_c_struct_member *mgos_bt_gattc_js_get_read_result_def(void) {
-  return gattc_read_result_def;
+const struct mjs_c_struct_member *mgos_bt_gattc_js_get_read_result_arg_def(
+    void) {
+  return gattc_read_result_arg_def;
 }
 
-static const struct mjs_c_struct_member gattc_write_result_def[] = {
+static const struct mjs_c_struct_member gattc_write_result_arg_def[] = {
     {"conn", offsetof(struct mgos_bt_gattc_write_result_arg, conn),
      MJS_STRUCT_FIELD_TYPE_STRUCT, gatt_conn_def},
     {"handle", offsetof(struct mgos_bt_gattc_write_result_arg, handle),
@@ -165,12 +166,25 @@ static const struct mjs_c_struct_member gattc_write_result_def[] = {
     {NULL},
 };
 
-const struct mjs_c_struct_member *mgos_bt_gattc_js_get_write_result_def(void) {
-  return gattc_write_result_def;
+const struct mjs_c_struct_member *mgos_bt_gattc_js_get_write_result_arg_def(
+    void) {
+  return gattc_write_result_arg_def;
 }
 
+static const struct mjs_c_struct_member gattc_notify_arg_def[] = {
+    {"conn", offsetof(struct mgos_bt_gattc_notify_arg, conn),
+     MJS_STRUCT_FIELD_TYPE_STRUCT, gatt_conn_def},
+    {"handle", offsetof(struct mgos_bt_gattc_notify_arg, handle),
+     MJS_STRUCT_FIELD_TYPE_UINT16, NULL},
+    {"isIndication", offsetof(struct mgos_bt_gattc_notify_arg, is_indication),
+     MJS_STRUCT_FIELD_TYPE_BOOL, NULL},
+    {"data", offsetof(struct mgos_bt_gattc_notify_arg, data),
+     MJS_STRUCT_FIELD_TYPE_MG_STR, NULL},
+    {NULL},
+};
+
 const struct mjs_c_struct_member *mgos_bt_gattc_js_get_notify_arg_def(void) {
-  return gattc_read_result_def; /* Currently they are the same */
+  return gattc_notify_arg_def;
 }
 
 static const struct mjs_c_struct_member gatts_read_arg_def[] = {

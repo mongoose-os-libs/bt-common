@@ -643,12 +643,11 @@ static int esp32_gatts_attr_access_cb(uint16_t ch, uint16_t ah,
     }
     case BLE_GATT_ACCESS_OP_WRITE_CHR:
     case BLE_GATT_ACCESS_OP_WRITE_DSC: {
-      uint16_t data_len = 0;
-      char *data = esp32_bt_mbuf_to_flat(ctxt->om, &data_len);
+      struct mg_str data = esp32_bt_mbuf_to_flat(ctxt->om);
       struct mgos_bt_gatts_write_arg warg = {
           .svc_uuid = sse->se->uuid,
           .handle = ah,
-          .data = mg_mk_str_n(data, data_len),
+          .data = data,
           .trans_id = 0,
           .offset = 0,
           .need_rsp = true,
@@ -677,7 +676,7 @@ static int esp32_gatts_attr_access_cb(uint16_t ch, uint16_t ah,
                        (int) warg.data.len, st));
       }
       res = esp32_gatts_get_att_err(st);
-      free(data);
+      mg_strfree(&data);
       break;
     }
   }
