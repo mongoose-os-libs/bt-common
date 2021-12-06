@@ -41,6 +41,7 @@ enum mgos_bt_gatts_ev {
 
 struct mgos_bt_gatts_conn {
   struct mgos_bt_gatt_conn gc;
+  struct mgos_bt_uuid svc_uuid;
   void *user_data; /* Opaque pointer for user. */
 };
 
