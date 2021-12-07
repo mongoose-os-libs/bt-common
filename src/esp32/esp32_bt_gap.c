@@ -241,13 +241,9 @@ bool esp32_bt_gap_start_advertising(void) {
   } else {
     struct ble_hs_adv_fields fields = {
         .flags = 0,
-
         .name = (uint8_t *) dev_name,
         .name_len = strlen(dev_name),
         .name_is_complete = true,
-
-        .tx_pwr_lvl = BLE_HS_ADV_TX_PWR_LVL_AUTO,
-        .tx_pwr_lvl_is_present = true,
     };
     if ((rc = ble_gap_adv_set_fields(&fields)) != 0) {
       LOG(LL_ERROR, ("ble_gap_adv_set_fields: %d", rc));
