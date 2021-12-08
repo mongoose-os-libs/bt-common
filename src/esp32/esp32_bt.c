@@ -104,8 +104,20 @@ const char *esp32_bt_addr_to_str(const ble_addr_t *addr, char *out) {
 }
 
 void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, ble_uuid_any_t *out) {
-  out->u.type = in->len * 8;
-  memcpy(out->u128.value, in->uuid.uuid128, 16);
+  switch (in->len) {
+    case 2:
+      out->u16.u.type = BLE_UUID_TYPE_16;
+      out->u16.value = in->uuid.uuid16;
+      break;
+    case 4:
+      out->u32.u.type = BLE_UUID_TYPE_32;
+      out->u32.value = in->uuid.uuid32;
+      break;
+    case 16:
+      out->u128.u.type = BLE_UUID_TYPE_128;
+      memcpy(out->u128.value, in->uuid.uuid128, 16);
+      break;
+  }
 }
 
 void esp32_bt_uuid_to_mgos(const ble_uuid_t *in, struct mgos_bt_uuid *out) {
