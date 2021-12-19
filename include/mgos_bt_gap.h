@@ -39,6 +39,8 @@ enum mgos_bt_gap_event {
 struct mgos_bt_gap_scan_opts {
   int duration_ms;
   bool active;
+  int interval_ms;
+  int window_ms;
 };
 
 // https://www.bluetooth.com/specifications/assigned-numbers/generic-access-profile
