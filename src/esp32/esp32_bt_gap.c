@@ -150,8 +150,9 @@ bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *opts) {
   struct mgos_bt_scan_ctx *ctx = calloc(1, sizeof(*ctx));
   if (ctx == NULL) return false;
   struct ble_gap_disc_params params = {
-      .itvl = MGOS_BT_GAP_DEFAULT_SCAN_INTERVAL_MS / 0.625,
-      .window = MGOS_BT_GAP_DEFAULT_SCAN_WINDOW_MS / 0.625,
+      .itvl =
+          (opts->interval_ms ?: MGOS_BT_GAP_DEFAULT_SCAN_INTERVAL_MS) / 0.625,
+      .window = (opts->window_ms ?: MGOS_BT_GAP_DEFAULT_SCAN_WINDOW_MS) / 0.625,
       .filter_policy = BLE_HCI_SCAN_FILT_NO_WL,
       .limited = false,
       .passive = !opts->active,
