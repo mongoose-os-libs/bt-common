@@ -160,7 +160,8 @@ bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *opts) {
   };
   ctx->active = opts->active;
   SLIST_INIT(&ctx->results);
-  int rc = ble_gap_disc(own_addr_type, opts->duration_ms, &params,
+  int duration_ms = (opts->duration_ms ?: MGOS_BT_GAP_DEFAULT_SCAN_DURATION_MS);
+  int rc = ble_gap_disc(own_addr_type, duration_ms, &params,
                         mgos_bt_scan_event_fn, ctx);
   if (rc == 0) {
     LOG(LL_DEBUG, ("Starting scan (%s, %d ms %d/%d w/i)",
@@ -265,11 +266,11 @@ bool esp32_bt_gap_start_advertising(void) {
       json_scanf(scan_rsp_data_hex.p, scan_rsp_data_hex.len, "%H",
                  &scan_rsp_data.len, &scan_rsp_data.p);
       if (scan_rsp_data.len > 0) {
-        if (scan_rsp_data.len <= MGOS_BT_GAP_MAX_SCAN_RSP_DATA_LEN) {
+        if (scan_rsp_data.len <= MGOS_BT_GAP_SCAN_RSP_MAX_LEN) {
           mgos_bt_gap_set_scan_rsp_data(scan_rsp_data);
         } else {
           LOG(LL_ERROR, ("Scan response data too long (%d), max is %d",
-                         scan_rsp_data.len, MGOS_BT_GAP_MAX_SCAN_RSP_DATA_LEN));
+                         scan_rsp_data.len, MGOS_BT_GAP_SCAN_RSP_MAX_LEN));
         }
       }
       mg_strfree(&scan_rsp_data);

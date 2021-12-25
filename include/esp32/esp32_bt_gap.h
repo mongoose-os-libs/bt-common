@@ -25,12 +25,6 @@
 extern "C" {
 #endif
 
-#define MGOS_BT_GAP_DEFAULT_SCAN_WINDOW_MS 123
-#define MGOS_BT_GAP_DEFAULT_SCAN_INTERVAL_MS 154
-#define MGOS_BT_GAP_DEFAULT_SCAN_DURATION_MS 5000
-
-#define MGOS_BT_GAP_MAX_SCAN_RSP_DATA_LEN 31
-
 bool mgos_bt_gap_get_pairing_enable(void);
 bool mgos_bt_gap_set_pairing_enable(bool pairing_enable);
 
