@@ -5,6 +5,7 @@ let GATTC = {
 
   connect: ffi('bool mgos_bt_gattc_connect_js(char *)'),
   getConnectArg: function(evdata) { return s2o(evdata, GATTC._cd); },
+  getDisconnectArg: function(evdata) { return s2o(evdata, GATTC._dd); },
 
   discover: ffi('bool mgos_bt_gattc_discover(int)'),
   getDiscoveryResultArg: function(evdata) { return s2o(evdata, GATTC._drad); },
@@ -23,7 +24,8 @@ let GATTC = {
 
   disconnect: ffi('bool mgos_bt_gattc_disconnect(int)'),
 
-  _cd: ffi('void *mgos_bt_gatt_js_get_conn_def(void)')(),
+  _cd: ffi('void *mgos_bt_gatt_js_get_connect_arg_def(void)')(),
+  _dd: ffi('void *mgos_bt_gatt_js_get_disconnect_arg_def(void)')(),
   _rrd: ffi('void *mgos_bt_gattc_js_get_read_result_arg_def(void)')(),
   _wrd: ffi('void *mgos_bt_gattc_js_get_write_result_arg_def(void)')(),
   _nad: ffi('void *mgos_bt_gattc_js_get_notify_arg_def(void)')(),

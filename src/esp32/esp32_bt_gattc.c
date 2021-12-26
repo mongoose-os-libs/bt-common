@@ -101,8 +101,11 @@ static int esp32_bt_gattc_mtu_event(uint16_t conn_id,
     conn->gc.mtu = mtu;
   }
   conn->connected = true;
-  mgos_event_trigger_schedule(MGOS_BT_GATTC_EV_CONNECT, &conn->gc,
-                              sizeof(conn->gc));
+  struct mgos_bt_gattc_connect_arg carg = {
+      .conn = conn->gc,
+      .ok = true,
+  };
+  mgos_event_trigger_schedule(MGOS_BT_GATTC_EV_CONNECT, &carg, sizeof(carg));
   return 0;
 }
 
@@ -177,7 +180,18 @@ static int esp32_bt_gattc_event(struct ble_gap_event *ev, void *arg) {
       LOG(LL_INFO, ("CONNECT %s ch %d st %d rssi %d",
                     esp32_bt_addr_to_str(&cd.peer_ota_addr, buf1), conn_id,
                     ev->connect.status, -conn_rssi));
-      ble_gattc_exchange_mtu(conn_id, esp32_bt_gattc_mtu_event, conn);
+      if (ev->connect.status == 0) {
+        ble_gattc_exchange_mtu(conn_id, esp32_bt_gattc_mtu_event, conn);
+      } else {
+        SLIST_REMOVE(&s_conns, conn, esp32_bt_gattc_conn, next);
+        struct mgos_bt_gattc_connect_arg carg = {
+            .conn = conn->gc,
+            .ok = false,
+        };
+        mgos_event_trigger_schedule(MGOS_BT_GATTC_EV_CONNECT, &carg,
+                                    sizeof(carg));
+        free(conn);
+      }
       break;
     }
     case BLE_GAP_EVENT_MTU: {
@@ -191,8 +205,11 @@ static int esp32_bt_gattc_event(struct ble_gap_event *ev, void *arg) {
                     ev->disconnect.reason));
       SLIST_REMOVE(&s_conns, conn, esp32_bt_gattc_conn, next);
       if (conn->connected) {
-        mgos_event_trigger_schedule(MGOS_BT_GATTC_EV_DISCONNECT, &conn->gc,
-                                    sizeof(conn->gc));
+        struct mgos_bt_gattc_disconnect_arg arg = {
+            .conn = conn->gc,
+        };
+        mgos_event_trigger_schedule(MGOS_BT_GATTC_EV_DISCONNECT, &arg,
+                                    sizeof(arg));
         esp32_bt_gattc_finish_discovery(conn, false /* ok */);
       }
       struct esp32_bt_gattc_disc_result *dre, *dret;

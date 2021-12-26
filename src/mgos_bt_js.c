@@ -81,6 +81,28 @@ const struct mjs_c_struct_member *mgos_bt_gatt_js_get_conn_def(void) {
   return gatt_conn_def;
 }
 
+static const struct mjs_c_struct_member gattc_connect_arg_def[] = {
+    {"conn", offsetof(struct mgos_bt_gattc_connect_arg, conn),
+     MJS_STRUCT_FIELD_TYPE_STRUCT, gatt_conn_def},
+    {"ok", offsetof(struct mgos_bt_gattc_connect_arg, ok),
+     MJS_STRUCT_FIELD_TYPE_BOOL, NULL},
+    {NULL},
+};
+
+const struct mjs_c_struct_member *mgos_bt_gatt_js_get_connect_arg_def(void) {
+  return gattc_connect_arg_def;
+}
+
+static const struct mjs_c_struct_member gattc_disconnect_arg_def[] = {
+    {"conn", offsetof(struct mgos_bt_gattc_disconnect_arg, conn),
+     MJS_STRUCT_FIELD_TYPE_STRUCT, gatt_conn_def},
+    {NULL},
+};
+
+const struct mjs_c_struct_member *mgos_bt_gatt_js_get_disconnect_arg_def(void) {
+  return gattc_disconnect_arg_def;
+}
+
 /*
  * XXX: At the moment there is no good way to return non-nul-terminated string
  * to mjs. So we nul-terminate it in a static variable and return that.

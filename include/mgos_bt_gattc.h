@@ -29,8 +29,9 @@ extern "C" {
 
 /* Note: Keep in sync with api_bt_gattc.js */
 enum mgos_bt_gattc_event {
-  MGOS_BT_GATTC_EV_CONNECT = MGOS_BT_GATTC_EV_BASE, /* mgos_bt_gatt_conn */
-  MGOS_BT_GATTC_EV_DISCONNECT,                      /* mgos_bt_gatt_conn */
+  MGOS_BT_GATTC_EV_CONNECT =
+      MGOS_BT_GATTC_EV_BASE,         /* mgos_bt_gattc_connect_arg */
+  MGOS_BT_GATTC_EV_DISCONNECT,       /* mgos_bt_gattc_disconnect_arg */
   MGOS_BT_GATTC_EV_DISCOVERY_RESULT, /* mgos_bt_gattc_discovery_result_arg */
   MGOS_BT_GATTC_EV_DISCOVERY_DONE,   /* mgos_bt_gattc_discovery_done_arg */
   MGOS_BT_GATTC_EV_READ_RESULT,      /* mgos_bt_gattc_read_result_arg */
@@ -39,6 +40,15 @@ enum mgos_bt_gattc_event {
 };
 
 #define MGOS_BT_GATTC_INVALID_CONN_ID (-1)
+
+struct mgos_bt_gattc_connect_arg {
+  struct mgos_bt_gatt_conn conn; /* Device address */
+  bool ok;                       /* Success indicator. */
+};
+
+struct mgos_bt_gattc_disconnect_arg {
+  struct mgos_bt_gatt_conn conn; /* Device address */
+};
 
 struct mgos_bt_gattc_discovery_result_arg {
   struct mgos_bt_gatt_conn conn; /* Device address */
