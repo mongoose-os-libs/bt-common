@@ -142,6 +142,22 @@ static void esp32_bt_gattc_finish_discovery(struct esp32_bt_gattc_conn *conn,
           };
           esp32_bt_uuid_to_mgos(&sdre->svc.uuid.u, &arg.svc);
           esp32_bt_uuid_to_mgos(&dre->chr.uuid.u, &arg.chr);
+          uint8_t pp = dre->chr.properties;
+          if ((pp & BLE_GATT_CHR_PROP_READ) != 0) {
+            arg.prop |= MGOS_BT_GATT_PROP_READ;
+          }
+          if ((pp & BLE_GATT_CHR_PROP_WRITE) != 0) {
+            arg.prop |= MGOS_BT_GATT_PROP_WRITE;
+          }
+          if ((pp & BLE_GATT_CHR_PROP_NOTIFY) != 0) {
+            arg.prop |= MGOS_BT_GATT_PROP_NOTIFY;
+          }
+          if ((pp & BLE_GATT_CHR_PROP_INDICATE) != 0) {
+            arg.prop |= MGOS_BT_GATT_PROP_INDICATE;
+          }
+          if ((pp & BLE_GATT_CHR_PROP_WRITE_NO_RSP) != 0) {
+            arg.prop |= MGOS_BT_GATT_PROP_WRITE_NR;
+          }
           mgos_event_trigger(MGOS_BT_GATTC_EV_DISCOVERY_RESULT, &arg);
           break;
         }
