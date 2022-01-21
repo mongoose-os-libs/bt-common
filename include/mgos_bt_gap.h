@@ -36,7 +36,7 @@ extern "C" {
 /* Note: Keep in sync with api_bt_gap.js */
 enum mgos_bt_gap_event {
   MGOS_BT_GAP_EVENT_SCAN_RESULT =
-      MGOS_BT_GAP_EVENT_BASE,  /* mgos_gap_scan_result */
+      MGOS_BT_GAP_EVENT_BASE,  /* mgos_bt_gap_scan_result */
   MGOS_BT_GAP_EVENT_SCAN_STOP, /* NULL */
 };
 
