@@ -26,7 +26,7 @@ config_schema:
   - ["bt.random_address", "b", false, {title: "Use random BT address"}]
   - ["bt.gatt_mtu", "i", 500, {title: "Local MTU setting, used when negotiating with clients"}]
   - ["bt.gatts", "o", {title: "GATTS settings"}]
-  - ["bt.gatts.min_sec_level", "i", 0, {title: "0 - no auth required, 1 - encryption reqd, 2 - encryption + MITM reqd"}]
+  - ["bt.gatts.min_sec_level", "i", 0, {title: "0 - no auth required, 1 - auth reqd, 2 - auth + encryption reqd, 3 - auth + encryption + MITM reqd"}]
 
 conds:
   - when: mos.platform == "esp32"
