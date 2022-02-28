@@ -18,7 +18,7 @@ settings:
   "max_paired_devices": 10,   // Allow pairing with up to this many devices; -1 - no limit
   "gatts": {
     "min_sec_level": 0,       // Minimum security level for all attributes of all services.
-                              // 0 - no auth required, 1 - encryption reqd, 2 - encryption + MITM reqd
+                              // 0 - no auth required, 1 - auth reqd, 2 - auth + encryption reqd, 3 - auth + encryption + MITM reqd
     "require_pairing": false  // Require taht device is paired before accessing services
   }
 }
@@ -29,4 +29,4 @@ settings:
 Default settings allow for unrestricted access: anyone can pair with a device and access the services.
 A better idea is to set `bt.gatts.require_pairing` to true, `bt.allow_pairing` to false and only enable it for a limited time via `mgos_bt_gap_set_pairing_enable` when user performs some action, e.g. presses a button.
 Raising `bt.gatts.min_sec_level` to at least 1 is also advisable.
-_Note_: At present, level 2 (MITM protection) is not usable as it requires device to have at least output capability during pairing, and there's no API for displaying the pairing code yet.
+_Note_: At present, level 3 (MITM protection) is not usable as it requires device to have at least output capability during pairing, and there's no API for displaying the pairing code yet.
