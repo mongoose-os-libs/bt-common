@@ -405,6 +405,7 @@ enum mgos_bt_status mgos_bt_get_status(void) {
       return MGOS_BT_STOPPING;
     }
   }
+  return MGOS_BT_STOPPED;
 }
 
 bool mgos_bt_common_init(void) {
