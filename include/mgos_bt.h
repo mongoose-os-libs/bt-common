@@ -27,12 +27,30 @@
 extern "C" {
 #endif
 
+#define MGOS_BT_EV_BASE MGOS_EVENT_BASE('B', 'T', 'C')
+#define MGOS_EVENT_GRP_BT MGOS_BT_EV_BASE
+
 enum mgos_bt_addr_type {
   MGOS_BT_ADDR_TYPE_NONE = 0,
   MGOS_BT_ADDR_TYPE_PUBLIC = 1,
   MGOS_BT_ADDR_TYPE_RANDOM_STATIC = 2,
   MGOS_BT_ADDR_TYPE_RANDOM_NON_RESOLVABLE = 3,
   MGOS_BT_ADDR_TYPE_RANDOM_RESOLVABLE = 4,
+};
+
+enum mgos_bt_event {
+  MGOS_BT_EV_STOPPED =
+      MGOS_BT_EV_BASE,  /* Arg: NULL */
+  MGOS_BT_EV_STARTING,  /* Arg: NULL */
+  MGOS_BT_EV_STARTED,   /* Arg: NULL */
+  MGOS_BT_EV_STOPPING,  /* Arg: NULL */
+};
+
+enum mgos_bt_status {
+  MGOS_BT_STOPPED = 0,
+  MGOS_BT_STARTING = 1,
+  MGOS_BT_STARTED = 2,
+  MGOS_BT_STOPPING = 3,
 };
 
 struct mgos_bt_addr {
@@ -82,6 +100,8 @@ bool mgos_bt_get_device_address(struct mgos_bt_addr *addr);
 // Stops the BT stack. Async.
 bool mgos_bt_start(void);
 bool mgos_bt_stop(void);
+
+enum mgos_bt_status mgos_bt_get_status(void);
 
 #ifdef __cplusplus
 }

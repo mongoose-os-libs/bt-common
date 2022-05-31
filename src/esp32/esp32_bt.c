@@ -191,6 +191,7 @@ static void esp32_bt_synced(void) {
   int rc;
 
   s_state = ESP32_BT_STARTED;
+  mgos_event_trigger_schedule(MGOS_BT_EV_STARTED, NULL, 0);
 
   if (!s_should_be_running) {
     mgos_bt_stop();
@@ -336,6 +337,7 @@ out:
 static void ble_hs_stop_cb(int status, void *arg) {
   LOG(LL_INFO, ("BLE stopped, status %d", status));
   s_state = ESP32_BT_STOPPED;
+  mgos_event_trigger_schedule(MGOS_BT_EV_STOPPED, NULL, 0);
   if (s_should_be_running) mgos_bt_start();
   (void) arg;
 }
@@ -345,6 +347,7 @@ bool mgos_bt_start(void) {
   if (s_state != ESP32_BT_STOPPED) return true;
   if (!esp32_bt_init()) return false;
   s_state = ESP32_BT_STARTING;
+  mgos_event_trigger_schedule(MGOS_BT_EV_STARTING, NULL, 0);
   if (!esp32_bt_gatts_start()) {
     LOG(LL_ERROR, ("%s start failed", "GATTS"));
     return false;
@@ -357,6 +360,7 @@ bool mgos_bt_stop(void) {
   s_should_be_running = false;
   if (s_state != ESP32_BT_STARTED) return true;
   s_state = ESP32_BT_STOPPING;
+  mgos_event_trigger_schedule(MGOS_BT_EV_STOPPING, NULL, 0);
   return (ble_hs_stop(&s_stop_listener, ble_hs_stop_cb, NULL) == 0);
 }
 
@@ -384,6 +388,23 @@ struct mg_str esp32_bt_mbuf_to_flat(const struct os_mbuf *om) {
   res.p = data;
   res.len = data_len;
   return res;
+}
+
+enum mgos_bt_status mgos_bt_get_status(void) {
+  switch (s_state) {
+    case ESP32_BT_STOPPED: {
+      return MGOS_BT_STOPPED;
+    }
+    case ESP32_BT_STARTING: {
+      return MGOS_BT_STARTING;
+    }
+    case ESP32_BT_STARTED: {
+      return MGOS_BT_STARTED;
+    }
+    case ESP32_BT_STOPPING: {
+      return MGOS_BT_STOPPING;
+    }
+  }
 }
 
 bool mgos_bt_common_init(void) {
