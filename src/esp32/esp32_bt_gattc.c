@@ -386,8 +386,9 @@ bool mgos_bt_gattc_set_notify_mode_cccd(uint16_t conn_id, uint16_t cccd_handle,
   struct esp32_bt_gattc_conn *conn = find_conn_by_id(conn_id);
   if (conn == NULL) return false;
   uint8_t data[2] = {mode, 0};
-  int ret =
-      ble_gattc_write_no_rsp_flat(conn_id, cccd_handle, data, sizeof(data));
+  int ret = ble_gattc_write_flat(conn_id, cccd_handle, data, sizeof(data),
+                                 esp32_bt_gattc_write_cb, (void *) 0);
+
   if (ret != 0) {
     LOG(LL_ERROR, ("ret = %d", ret));
   }
