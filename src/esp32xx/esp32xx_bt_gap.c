@@ -28,6 +28,7 @@ static bool s_adv_enable = false;
 static bool s_advertising = false;
 static struct mg_str s_adv_data = MG_NULL_STR;
 static struct mg_str s_scan_rsp_data = MG_NULL_STR;
+static struct mgos_bt_scan_ctx *s_scan_ctx = NULL;
 
 bool mgos_bt_gap_get_pairing_enable(void) {
   return ble_hs_cfg.sm_bonding;
@@ -78,6 +79,15 @@ static void check_pending_results(struct mgos_bt_scan_ctx *ctx, int64_t now,
                                 sizeof(re->arg));
     free(re);
   }
+}
+
+static void mgos_bt_scan_finalize(struct mgos_bt_scan_ctx *ctx) {
+  // Flush the pending result list.
+  check_pending_results(ctx, mgos_uptime_micros() + SCAN_RSP_WAIT_MICROS,
+                        NULL, NULL);
+  mgos_event_trigger_schedule(MGOS_BT_GAP_EVENT_SCAN_STOP, NULL, 0);
+  free(ctx);
+  s_scan_ctx = NULL;
 }
 
 static int mgos_bt_scan_event_fn(struct ble_gap_event *ev, void *arg) {
@@ -134,11 +144,7 @@ static int mgos_bt_scan_event_fn(struct ble_gap_event *ev, void *arg) {
     }
     case BLE_GAP_EVENT_DISC_COMPLETE: {
       LOG(LL_DEBUG, ("DISC_COMPLETE"));
-      // Flush the pending result list.
-      check_pending_results(ctx, mgos_uptime_micros() + SCAN_RSP_WAIT_MICROS,
-                            NULL, NULL);
-      mgos_event_trigger_schedule(MGOS_BT_GAP_EVENT_SCAN_STOP, NULL, 0);
-      free(ctx);
+      mgos_bt_scan_finalize(ctx);
       break;
     }
   }
@@ -161,18 +167,34 @@ bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *opts) {
   ctx->active = opts->active;
   SLIST_INIT(&ctx->results);
   int duration_ms = (opts->duration_ms ?: MGOS_BT_GAP_DEFAULT_SCAN_DURATION_MS);
+  duration_ms = (opts->duration_ms == MGOS_BT_GAP_SCAN_DURATION_INFINITE) ?
+                BLE_HS_FOREVER : duration_ms;
   int rc = ble_gap_disc(own_addr_type, duration_ms, &params,
                         mgos_bt_scan_event_fn, ctx);
   if (rc == 0) {
     LOG(LL_DEBUG, ("Starting scan (%s, %d ms %d/%d w/i)",
                    (params.passive ? "passive" : "active"), opts->duration_ms,
                    params.window, params.itvl));
+    mgos_event_trigger_schedule(MGOS_BT_GAP_EVENT_SCAN_START, NULL, 0);
+    s_scan_ctx = ctx;
     return true;
   } else {
     LOG(LL_ERROR, ("Failed to start scan (%d)", rc));
     free(ctx);
     return false;
   }
+}
+
+bool mgos_bt_gap_scan_stop() {
+  int rc = ble_gap_disc_cancel();
+  if (rc == 0 && s_scan_ctx != NULL) {
+    mgos_bt_scan_finalize(s_scan_ctx);
+  }
+  return (rc == 0);
+}
+
+bool mgos_bt_gap_scan_in_porgress() {
+  return (ble_gap_disc_active() == 1);
 }
 
 static int esp32xx_bt_gap_event(struct ble_gap_event *ev, void *arg) {

@@ -30,14 +30,16 @@ extern "C" {
 #define MGOS_BT_GAP_DEFAULT_SCAN_WINDOW_MS 123
 #define MGOS_BT_GAP_DEFAULT_SCAN_INTERVAL_MS 154
 #define MGOS_BT_GAP_DEFAULT_SCAN_DURATION_MS 5000
+#define MGOS_BT_GAP_SCAN_DURATION_INFINITE -1
 
 #define MGOS_BT_GAP_EVENT_BASE MGOS_EVENT_BASE('G', 'A', 'P')
 
 /* Note: Keep in sync with api_bt_gap.js */
 enum mgos_bt_gap_event {
   MGOS_BT_GAP_EVENT_SCAN_RESULT =
-      MGOS_BT_GAP_EVENT_BASE,  /* mgos_bt_gap_scan_result */
-  MGOS_BT_GAP_EVENT_SCAN_STOP, /* NULL */
+      MGOS_BT_GAP_EVENT_BASE,   /* mgos_bt_gap_scan_result */
+  MGOS_BT_GAP_EVENT_SCAN_STOP,  /* NULL */
+  MGOS_BT_GAP_EVENT_SCAN_START, /* NULL */
 };
 
 struct mgos_bt_gap_scan_opts {
@@ -89,6 +91,8 @@ struct mgos_bt_gap_scan_result {
 };
 
 bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *);
+bool mgos_bt_gap_scan_stop();
+bool mgos_bt_gap_scan_in_porgress();
 
 bool mgos_bt_gap_set_name(struct mg_str name);
 struct mg_str mgos_bt_gap_get_name(void);
