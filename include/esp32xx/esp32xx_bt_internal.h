@@ -17,24 +17,31 @@
 
 #pragma once
 
-#include "mgos_bt.h"
+#include <stdbool.h>
 
-#include "host/ble_uuid.h"
-#include "nimble/ble.h"
+#include "common/cs_dbg.h"
+
+#include "mgos_bt_gatt.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define MGOS_BT_ADDR_LEN 6
+bool esp32xx_bt_gap_start_advertising(void);
+bool esp32xx_bt_gatts_init(void);
+bool esp32xx_bt_gatts_start(void);
+void esp32xx_bt_restart(void);
 
-void mgos_bt_addr_to_esp32(const struct mgos_bt_addr *in, ble_addr_t *out);
-void esp32_bt_addr_to_mgos(const ble_addr_t *in, struct mgos_bt_addr *out);
-const char *esp32_bt_addr_to_str(const ble_addr_t *addr, char *out);
+struct ble_gap_event;
+int esp32xx_bt_gatts_event(const struct ble_gap_event *event, void *arg);
 
-void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, ble_uuid_any_t *out);
-void esp32_bt_uuid_to_mgos(const ble_uuid_t *in, struct mgos_bt_uuid *out);
-const char *esp32_bt_uuid_to_str(const ble_uuid_t *uuid, char *out);
+extern uint8_t own_addr_type;
+
+void esp32xx_bt_rlock(void);
+void esp32xx_bt_runlock(void);
+
+struct os_mbuf;
+struct mg_str esp32xx_bt_mbuf_to_flat(const struct os_mbuf *om);
 
 #ifdef __cplusplus
 }

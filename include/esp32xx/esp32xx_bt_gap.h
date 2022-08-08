@@ -17,31 +17,16 @@
 
 #pragma once
 
-#include <stdbool.h>
+#include "mgos_bt_gap.h"
 
-#include "common/cs_dbg.h"
-
-#include "mgos_bt_gatt.h"
+#include "esp32xx_bt.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool esp32_bt_gap_start_advertising(void);
-bool esp32_bt_gatts_init(void);
-bool esp32_bt_gatts_start(void);
-void esp32_bt_restart(void);
-
-struct ble_gap_event;
-int esp32_bt_gatts_event(const struct ble_gap_event *event, void *arg);
-
-extern uint8_t own_addr_type;
-
-void esp32_bt_rlock(void);
-void esp32_bt_runlock(void);
-
-struct os_mbuf;
-struct mg_str esp32_bt_mbuf_to_flat(const struct os_mbuf *om);
+bool mgos_bt_gap_get_pairing_enable(void);
+bool mgos_bt_gap_set_pairing_enable(bool pairing_enable);
 
 #ifdef __cplusplus
 }

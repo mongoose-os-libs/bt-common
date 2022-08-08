@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-#include "esp32_bt.h"
-#include "esp32_bt_gap.h"
-#include "esp32_bt_internal.h"
+#include "esp32xx_bt.h"
+#include "esp32xx_bt_gap.h"
+#include "esp32xx_bt_internal.h"
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -44,13 +44,13 @@ static TaskHandle_t s_host_task_handle;
 static SemaphoreHandle_t s_sem = NULL;
 static struct mgos_rlock_type *s_lock = NULL;
 
-enum esp32_bt_state {
+enum esp32xx_bt_state {
   ESP32_BT_STOPPED = 0,
   ESP32_BT_STARTING = 1,
   ESP32_BT_STARTED = 2,
   ESP32_BT_STOPPING = 3,
 };
-static enum esp32_bt_state s_state = ESP32_BT_STOPPED;
+static enum esp32xx_bt_state s_state = ESP32_BT_STOPPED;
 struct ble_hs_stop_listener s_stop_listener;
 
 void mgos_bt_addr_to_esp32(const struct mgos_bt_addr *in, ble_addr_t *out) {
@@ -73,7 +73,7 @@ void mgos_bt_addr_to_esp32(const struct mgos_bt_addr *in, ble_addr_t *out) {
   out->val[5] = in->addr[0];
 }
 
-void esp32_bt_addr_to_mgos(const ble_addr_t *in, struct mgos_bt_addr *out) {
+void esp32xx_bt_addr_to_mgos(const ble_addr_t *in, struct mgos_bt_addr *out) {
   out->type = MGOS_BT_ADDR_TYPE_NONE;
   switch (in->type) {
     case BLE_ADDR_PUBLIC:
@@ -97,9 +97,9 @@ void esp32_bt_addr_to_mgos(const ble_addr_t *in, struct mgos_bt_addr *out) {
   out->addr[5] = in->val[0];
 }
 
-const char *esp32_bt_addr_to_str(const ble_addr_t *addr, char *out) {
+const char *esp32xx_bt_addr_to_str(const ble_addr_t *addr, char *out) {
   struct mgos_bt_addr maddr;
-  esp32_bt_addr_to_mgos(addr, &maddr);
+  esp32xx_bt_addr_to_mgos(addr, &maddr);
   return mgos_bt_addr_to_str(&maddr, MGOS_BT_ADDR_STRINGIFY_TYPE, out);
 }
 
@@ -120,7 +120,7 @@ void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, ble_uuid_any_t *out) {
   }
 }
 
-void esp32_bt_uuid_to_mgos(const ble_uuid_t *in, struct mgos_bt_uuid *out) {
+void esp32xx_bt_uuid_to_mgos(const ble_uuid_t *in, struct mgos_bt_uuid *out) {
   out->len = in->type / 8;
   switch (in->type) {
     case BLE_UUID_TYPE_16:
@@ -135,9 +135,9 @@ void esp32_bt_uuid_to_mgos(const ble_uuid_t *in, struct mgos_bt_uuid *out) {
   }
 }
 
-const char *esp32_bt_uuid_to_str(const ble_uuid_t *uuid, char *out) {
+const char *esp32xx_bt_uuid_to_str(const ble_uuid_t *uuid, char *out) {
   struct mgos_bt_uuid uuidm;
-  esp32_bt_uuid_to_mgos(uuid, &uuidm);
+  esp32xx_bt_uuid_to_mgos(uuid, &uuidm);
   return mgos_bt_uuid_to_str(&uuidm, out);
 }
 
@@ -179,15 +179,15 @@ bool mgos_bt_get_device_address(struct mgos_bt_addr *addr) {
     default:
       return false;
   }
-  esp32_bt_addr_to_mgos(&baddr, addr);
+  esp32xx_bt_addr_to_mgos(&baddr, addr);
   return true;
 }
 
-static void esp32_bt_reset(int reason) {
+static void esp32xx_bt_reset(int reason) {
   LOG(LL_ERROR, ("Resetting state; reason=%d", reason));
 }
 
-static void esp32_bt_synced(void) {
+static void esp32xx_bt_synced(void) {
   int rc;
 
   s_state = ESP32_BT_STARTED;
@@ -213,12 +213,12 @@ static void esp32_bt_synced(void) {
         ("BLE Device Address: %s",
          mgos_bt_addr_to_str(&addr, MGOS_BT_ADDR_STRINGIFY_TYPE, addr_str)));
   }
-  esp32_bt_gap_start_advertising();
+  esp32xx_bt_gap_start_advertising();
 }
 
 // Handler callback that executes host events on the mgos task.
 // For efficiency, we process multiple events at a time.
-static void esp32_bt_mgos_handler(void *arg) {
+static void esp32xx_bt_mgos_handler(void *arg) {
   int nevs = 1;
   struct ble_npl_event *ev, **ep, *evs[20] = {arg};
   struct ble_npl_eventq *q = nimble_port_get_dflt_eventq();
@@ -236,7 +236,7 @@ static void esp32_bt_mgos_handler(void *arg) {
   }
 }
 
-static void esp32_bt_host_task(void *param) {
+static void esp32xx_bt_host_task(void *param) {
   if (param == NULL) {  // This is the dummy task.
     nimble_port_freertos_deinit();
     return;
@@ -246,24 +246,24 @@ static void esp32_bt_host_task(void *param) {
   struct ble_npl_eventq *q = nimble_port_get_dflt_eventq();
   while (1) {
     ev = ble_npl_eventq_get(q, BLE_NPL_TIME_FOREVER);
-    while (!mgos_invoke_cb(esp32_bt_mgos_handler, ev, false /* from_isr */)) {
+    while (!mgos_invoke_cb(esp32xx_bt_mgos_handler, ev, false /* from_isr */)) {
     }
     // Wait for the mgos task callback to run and process the event.
     xSemaphoreTake(s_sem, portMAX_DELAY);
   }
 }
 
-void esp32_bt_rlock(void) {
+void esp32xx_bt_rlock(void) {
   mgos_rlock(s_lock);
 }
 
-void esp32_bt_runlock(void) {
+void esp32xx_bt_runlock(void) {
   mgos_runlock(s_lock);
 }
 
 extern void ble_store_config_init(void);
 
-static bool esp32_bt_init(void) {
+static bool esp32xx_bt_init(void) {
   if (s_inited) {
     return true;
   }
@@ -287,8 +287,8 @@ static bool esp32_bt_init(void) {
 
   nimble_port_init();
 
-  ble_hs_cfg.reset_cb = esp32_bt_reset;
-  ble_hs_cfg.sync_cb = esp32_bt_synced;
+  ble_hs_cfg.reset_cb = esp32xx_bt_reset;
+  ble_hs_cfg.sync_cb = esp32xx_bt_synced;
   ble_hs_cfg.store_status_cb = ble_store_util_status_rr;
 
   ble_hs_cfg.sm_sc = true;
@@ -307,16 +307,16 @@ static bool esp32_bt_init(void) {
 
   // This creates the high-pri LL task and a host task.
   // We don't use the latter because its priority is too high.
-  nimble_port_freertos_init(esp32_bt_host_task);
+  nimble_port_freertos_init(esp32xx_bt_host_task);
   // Instead we create our own here with priority below the main mgos task.
-  xTaskCreatePinnedToCore(esp32_bt_host_task, "ble", 1024, (void *) 1,
+  xTaskCreatePinnedToCore(esp32xx_bt_host_task, "ble", 1024, (void *) 1,
                           MGOS_TASK_PRIORITY - 1, &s_host_task_handle,
                           NIMBLE_CORE);
 
   // Default INFO level log is too spammy.
   esp_log_level_set("NimBLE", ESP_LOG_WARN);
 
-  if (!esp32_bt_gatts_init()) {
+  if (!esp32xx_bt_gatts_init()) {
     LOG(LL_ERROR, ("%s init failed", "GATTS"));
     goto out;
   }
@@ -345,10 +345,10 @@ static void ble_hs_stop_cb(int status, void *arg) {
 bool mgos_bt_start(void) {
   s_should_be_running = true;
   if (s_state != ESP32_BT_STOPPED) return true;
-  if (!esp32_bt_init()) return false;
+  if (!esp32xx_bt_init()) return false;
   s_state = ESP32_BT_STARTING;
   mgos_event_trigger_schedule(MGOS_BT_EV_STARTING, NULL, 0);
-  if (!esp32_bt_gatts_start()) {
+  if (!esp32xx_bt_gatts_start()) {
     LOG(LL_ERROR, ("%s start failed", "GATTS"));
     return false;
   }
@@ -364,18 +364,18 @@ bool mgos_bt_stop(void) {
   return (ble_hs_stop(&s_stop_listener, ble_hs_stop_cb, NULL) == 0);
 }
 
-void esp32_bt_restart(void) {
+void esp32xx_bt_restart(void) {
   if (!s_should_be_running) return;
   mgos_bt_stop();
   s_should_be_running = true;
 }
 
-static void esp32_bt_start(void *arg) {
+static void esp32xx_bt_start(void *arg) {
   mgos_bt_start();
   (void) arg;
 }
 
-struct mg_str esp32_bt_mbuf_to_flat(const struct os_mbuf *om) {
+struct mg_str esp32xx_bt_mbuf_to_flat(const struct os_mbuf *om) {
   struct mg_str res = MG_NULL_STR;
   if (om == NULL) return res;
   char *data = NULL;
@@ -418,8 +418,8 @@ bool mgos_bt_common_init(void) {
     LOG(LL_ERROR, ("Random addresses are not supported, using public"));
     mgos_sys_config_set_bt_random_address(false);
   }
-  esp32_bt_init();
+  esp32xx_bt_init();
   // Delay starting the stack until other libraries are initialized
   // and services registered to avoid unnecessary restarts.
-  return mgos_invoke_cb(esp32_bt_start, NULL, false /* from_isr */);
+  return mgos_invoke_cb(esp32xx_bt_start, NULL, false /* from_isr */);
 }

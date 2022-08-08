@@ -17,16 +17,24 @@
 
 #pragma once
 
-#include "mgos_bt_gap.h"
+#include "mgos_bt.h"
 
-#include "esp32_bt.h"
+#include "host/ble_uuid.h"
+#include "nimble/ble.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-bool mgos_bt_gap_get_pairing_enable(void);
-bool mgos_bt_gap_set_pairing_enable(bool pairing_enable);
+#define MGOS_BT_ADDR_LEN 6
+
+void mgos_bt_addr_to_esp32(const struct mgos_bt_addr *in, ble_addr_t *out);
+void esp32xx_bt_addr_to_mgos(const ble_addr_t *in, struct mgos_bt_addr *out);
+const char *esp32xx_bt_addr_to_str(const ble_addr_t *addr, char *out);
+
+void mgos_bt_uuid_to_esp32(const struct mgos_bt_uuid *in, ble_uuid_any_t *out);
+void esp32xx_bt_uuid_to_mgos(const ble_uuid_t *in, struct mgos_bt_uuid *out);
+const char *esp32xx_bt_uuid_to_str(const ble_uuid_t *uuid, char *out);
 
 #ifdef __cplusplus
 }

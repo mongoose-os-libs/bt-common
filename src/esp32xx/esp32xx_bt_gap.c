@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-#include "esp32_bt_gap.h"
+#include "esp32xx_bt_gap.h"
 
 #include "mgos.h"
 
 #include "host/ble_gap.h"
 #include "services/gap/ble_svc_gap.h"
 
-#include "esp32_bt_internal.h"
+#include "esp32xx_bt_internal.h"
 
 static bool s_adv_enable = false;
 static bool s_advertising = false;
@@ -89,7 +89,7 @@ static int mgos_bt_scan_event_fn(struct ble_gap_event *ev, void *arg) {
       struct mgos_bt_gap_scan_result arg = {
           .rssi = ev->disc.rssi,
       };
-      esp32_bt_addr_to_mgos(&ev->disc.addr, &arg.addr);
+      esp32xx_bt_addr_to_mgos(&ev->disc.addr, &arg.addr);
       struct mg_str data =
           mg_mk_str_n((char *) ev->disc.data, ev->disc.length_data);
       LOG(LL_DEBUG,
@@ -175,27 +175,27 @@ bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *opts) {
   }
 }
 
-static int esp32_bt_gap_event(struct ble_gap_event *ev, void *arg) {
+static int esp32xx_bt_gap_event(struct ble_gap_event *ev, void *arg) {
   int ret = 0;
   LOG(LL_DEBUG, ("GAP Event %d", ev->type));
-  esp32_bt_rlock();
+  esp32xx_bt_rlock();
   switch (ev->type) {
     // Forward GATTS events to the GATTS handler.
     case BLE_GAP_EVENT_CONNECT:
       // Connect disables advertising. Resume, if it's enabled.
       s_advertising = false;
-      esp32_bt_gap_start_advertising();
+      esp32xx_bt_gap_start_advertising();
       // fallthrough
     case BLE_GAP_EVENT_DISCONNECT:
     case BLE_GAP_EVENT_ENC_CHANGE:
     case BLE_GAP_EVENT_SUBSCRIBE:
     case BLE_GAP_EVENT_NOTIFY_TX:
     case BLE_GAP_EVENT_MTU:
-      ret = esp32_bt_gatts_event(ev, arg);
+      ret = esp32xx_bt_gatts_event(ev, arg);
       break;
     case BLE_GAP_EVENT_ADV_COMPLETE:
       s_advertising = false;
-      esp32_bt_gap_start_advertising();
+      esp32xx_bt_gap_start_advertising();
       break;
     case BLE_GAP_EVENT_PASSKEY_ACTION:
       // TODO
@@ -213,11 +213,11 @@ static int esp32_bt_gap_event(struct ble_gap_event *ev, void *arg) {
       ret = BLE_GAP_REPEAT_PAIRING_RETRY;
     }
   }
-  esp32_bt_runlock();
+  esp32xx_bt_runlock();
   return ret;
 }
 
-bool esp32_bt_gap_start_advertising(void) {
+bool esp32xx_bt_gap_start_advertising(void) {
   int rc;
 
   if (s_advertising) return true;
@@ -288,7 +288,7 @@ bool esp32_bt_gap_start_advertising(void) {
       .channel_map = BLE_GAP_ADV_DFLT_CHANNEL_MAP,
   };
   if ((rc = ble_gap_adv_start(own_addr_type, NULL, BLE_HS_FOREVER, &adv_params,
-                              esp32_bt_gap_event, NULL)) != 0) {
+                              esp32xx_bt_gap_event, NULL)) != 0) {
     LOG(LL_ERROR, ("ble_gap_adv_start: %d", rc));
     return false;
   }
@@ -303,14 +303,14 @@ bool esp32_bt_gap_start_advertising(void) {
   return true;
 }
 
-static bool esp32_bt_gap_stop_advertising(void) {
-  esp32_bt_rlock();
+static bool esp32xx_bt_gap_stop_advertising(void) {
+  esp32xx_bt_rlock();
   bool res = !s_advertising;
   if (res) goto out;
   res = (ble_gap_adv_stop() == 0);
   if (res) s_advertising = false;
 out:
-  esp32_bt_runlock();
+  esp32xx_bt_runlock();
   return res;
 }
 
@@ -335,10 +335,10 @@ bool mgos_bt_gap_set_scan_rsp_data(struct mg_str scan_rsp_data) {
 }
 
 bool mgos_bt_gap_set_adv_enable(bool adv_enable) {
-  esp32_bt_rlock();
+  esp32xx_bt_rlock();
   s_adv_enable = adv_enable;
-  bool res = (s_adv_enable ? esp32_bt_gap_start_advertising()
-                           : esp32_bt_gap_stop_advertising());
-  esp32_bt_rlock();
+  bool res = (s_adv_enable ? esp32xx_bt_gap_start_advertising()
+                           : esp32xx_bt_gap_stop_advertising());
+  esp32xx_bt_rlock();
   return res;
 }
