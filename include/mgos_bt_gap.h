@@ -91,8 +91,8 @@ struct mgos_bt_gap_scan_result {
 };
 
 bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *);
-bool mgos_bt_gap_scan_stop();
-bool mgos_bt_gap_scan_in_porgress();
+bool mgos_bt_gap_scan_stop(void);
+bool mgos_bt_gap_scan_in_progress(void);
 
 bool mgos_bt_gap_set_name(struct mg_str name);
 struct mg_str mgos_bt_gap_get_name(void);

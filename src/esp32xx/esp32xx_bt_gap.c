@@ -185,7 +185,7 @@ bool mgos_bt_gap_scan(const struct mgos_bt_gap_scan_opts *opts) {
   }
 }
 
-bool mgos_bt_gap_scan_stop() {
+bool mgos_bt_gap_scan_stop(void) {
   int rc = ble_gap_disc_cancel();
   if (rc == 0 && s_scan_ctx != NULL) {
     mgos_bt_scan_finalize(s_scan_ctx);
@@ -193,7 +193,7 @@ bool mgos_bt_gap_scan_stop() {
   return (rc == 0);
 }
 
-bool mgos_bt_gap_scan_in_porgress() {
+bool mgos_bt_gap_scan_in_progress(void) {
   return (ble_gap_disc_active() == 1);
 }
 
