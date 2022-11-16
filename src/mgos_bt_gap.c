@@ -69,13 +69,15 @@ bool mgos_bt_gap_adv_data_has_service(struct mg_str adv_data,
     default:
       return false;
   }
-  struct mg_str d = adv_data;
-  while ((d = mgos_bt_gap_parse_adv_data(d, t1)).len == svc_uuid->len) {
-    if (memcmp(d.p, svc_uuid->uuid.uuid128, svc_uuid->len) == 0) return true;
+  struct mg_str d = mgos_bt_gap_parse_adv_data(adv_data, t1);
+  for (int next = 0; next < d.len; next += svc_uuid->len) {
+    if (next + svc_uuid->len > d.len) break;
+    if (memcmp(d.p + next, svc_uuid->uuid.uuid128, svc_uuid->len) == 0) return true;
   }
-  d = adv_data;
-  while ((d = mgos_bt_gap_parse_adv_data(d, t2)).len == svc_uuid->len) {
-    if (memcmp(d.p, svc_uuid->uuid.uuid128, svc_uuid->len) == 0) return true;
+  d = mgos_bt_gap_parse_adv_data(adv_data, t2);
+  for (int next = 0; next < d.len; next += svc_uuid->len) {
+    if (next + svc_uuid->len > d.len) break;
+    if (memcmp(d.p + next, svc_uuid->uuid.uuid128, svc_uuid->len) == 0) return true;
   }
   return false;
 }
