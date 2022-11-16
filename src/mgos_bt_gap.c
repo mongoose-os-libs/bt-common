@@ -29,6 +29,7 @@ struct mg_str mgos_bt_gap_parse_adv_data(struct mg_str adv_data,
   struct mg_str res = MG_NULL_STR;
   for (size_t i = 0; i < adv_data.len;) {
     size_t len = dp[i];
+    if (len == 0) break;
     if (i + len + 1 > adv_data.len) break;
     if (dp[i + 1] == t) {
       res.p = (const char *) dp + i + 2;
