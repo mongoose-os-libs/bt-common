@@ -29,6 +29,7 @@ struct mg_str mgos_bt_gap_parse_adv_data(struct mg_str adv_data,
   struct mg_str res = MG_NULL_STR;
   for (size_t i = 0; i < adv_data.len;) {
     size_t len = dp[i];
+    if (len == 0) break;
     if (i + len + 1 > adv_data.len) break;
     if (dp[i + 1] == t) {
       res.p = (const char *) dp + i + 2;
@@ -68,13 +69,14 @@ bool mgos_bt_gap_adv_data_has_service(struct mg_str adv_data,
     default:
       return false;
   }
-  struct mg_str d = adv_data;
-  while ((d = mgos_bt_gap_parse_adv_data(d, t1)).len == svc_uuid->len) {
-    if (memcmp(d.p, svc_uuid->uuid.uuid128, svc_uuid->len) == 0) return true;
+  const size_t slen = svc_uuid->len;
+  const struct mg_str d1 = mgos_bt_gap_parse_adv_data(adv_data, t1);
+  for (size_t next = 0; next + slen <= d1.len; next += slen) {
+    if (memcmp(d1.p + next, svc_uuid->uuid.uuid128, slen) == 0) return true;
   }
-  d = adv_data;
-  while ((d = mgos_bt_gap_parse_adv_data(d, t2)).len == svc_uuid->len) {
-    if (memcmp(d.p, svc_uuid->uuid.uuid128, svc_uuid->len) == 0) return true;
+  const struct mg_str d2 = mgos_bt_gap_parse_adv_data(adv_data, t2);
+  for (size_t next = 0; next + slen <= d2.len; next += slen) {
+    if (memcmp(d2.p + next, svc_uuid->uuid.uuid128, slen) == 0) return true;
   }
   return false;
 }
